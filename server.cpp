@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstring>
 #include <fcntl.h>
 #include <fstream>
@@ -15,73 +16,110 @@
 
 using namespace std;
 
+string trim(const string &str) { // e momentul sa ma dau mare
+  size_t first = str.find_first_not_of(" \n\r\t");
+  size_t last = str.find_last_not_of(" \n\r\t");
+  if (first == string::npos || last == string::npos)
+    return "";
+  return str.substr(first, last - first + 1);
+}
+
 const char *fifo_path = "/home/dan/Documents/CN2/fifoboss";
 const char *fifo_path2 = "/home/dan/Documents/CN2/fifosclav";
 int main() {
-
+  int pipe_fd[2];
+  if(pipe(pipe_fd)==-1){
+    cerr<<"eroare la pipe"<<endl;
+    return 1;
+  }
   if (access(fifo_path, F_OK) != -1) {
-    cout << "FIFO-ul exista deja. Se va folosi FIFO-ul existent." << endl;
+    cout << "FIFO-ul pt citire exista deja. Se va folosi FIFO-ul existent." << endl;
   } else {
     // Crearea FIFO-ului
     if (mkfifo(fifo_path, 0666) == -1) {
       perror("Eroare la crearea FIFO");
       return 1;
     }
-    cout << "FIFO creat, așteptând trimiterea de date..." << endl;
+    cout << "FIFO pt citire creat" << endl;
   } // creat fifo1 pt client->sv
   if (access(fifo_path2, F_OK) != -1) {
-    cout << "FIFO-ul exista deja. Se va folosi FIFO-ul existent." << endl;
+    cout << "FIFO-ul pt scriere exista deja. Se va folosi FIFO-ul existent." << endl;
   } else {
     // Crearea FIFO-ului
     if (mkfifo(fifo_path2, 0666) == -1) {
       perror("Eroare la crearea FIFO");
       return 1;
     }
-    cout << "FIFO creat, așteptând date..." << endl;
+    cout << "FIFO pt scriere creat" << endl;
   } // creat fifo2 pt sv->client
   int fd = open(fifo_path, O_RDONLY);
   int fd2 = open(fifo_path2, O_WRONLY);
   if (fd == -1) {
-    perror("Eroare la deschidere FIFO");
+    perror("Eroare la deschidere FIFO pt citire");
     return 1;
   }
+  if (fd2 == -1) {
+    perror("Eroare la deschidere FIFO pt scriere");
+    return 1;
+  }
+
   char buffer[100];
+  bool logat=false;
+
   while (true) {
-    int bytes_read = read(fd, buffer, sizeof(buffer));
+    int bytes_read = read(fd, buffer, sizeof(buffer) - 1);
     if (bytes_read > 0) {
       buffer[bytes_read] = '\0'; // terminator de string
+      string comanda = trim(string(buffer));
       cout << "Serverul a primit: " << buffer << endl;
-      pid_t pid=fork();
+      if(strcmp(comanda.c_str(), "quit")==0){
+          cout<<"haipa"<<endl;
+          raise(SIGTSTP);
+        }
+      if(strcmp(comanda.c_str(), "logout")==0 && logat==true){
+          cout<<"iti urez o zi ok"<<endl;
+          logat=false;
+          write(pipe_fd[1], "0",2);
+        }
+      else if(strcmp(comanda.c_str(), "logout")==0&& logat==false)
+          cout<<"nu exista nici un user logat"<<endl;
 
+      pid_t pid = fork();
+      
       if (pid == 0) {
-        if (strncmp(buffer, "login:", 6) == 0) {
-          char *remaining_buffer = buffer + 6;
+        close(pipe_fd[0]);
+        if (strncmp(comanda.c_str(), "login:", 6) == 0) {
+          string username = trim(comanda.substr(6)); // ba daca nici acum nu imi vede usernameurile din config dau Alt+F4
+
           ifstream configfile("config.txt");
           if (!configfile)
             cerr << "err la txt-ul cu useri" << endl;
           else {
             string linie;
-            bool found=false;
+            bool found = false;
             while (getline(configfile, linie)) {
-              if (strcmp(remaining_buffer, linie.c_str()) == 0) {
-                cout << "se permite accesul esti pe lista bosane" << endl,
-                    found = true;
+              if (username == trim(linie)) {
+                cout << "se permite accesul esti pe lista bosane" << endl;
+                found = true;
+                write(pipe_fd[1],"1",2);
                 break;
               }
-            }if (!found)
-                cout << "no access, user is not on the list";
+            }
+            if (!found)
+              cout << "no access, user is not on the list, GTFO" << endl;
             configfile.close();
           }
         }
         _exit(0);
-      } 
-      else if(pid<0){
-        cerr<<"fork failed"<<endl;
+      } else if (pid < 0) {
+        cerr << "fork pa" << endl;
       }
-    }else if(bytes_read==-1)
-      cerr<<"err"<<endl;
+    
+    } else if (bytes_read == -1)
+      cerr << "err" << endl;
   }
 
   close(fd);
+  close(fd2);
   return 0;
 }

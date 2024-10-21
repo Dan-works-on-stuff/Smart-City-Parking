@@ -1,3 +1,4 @@
+#include <csignal>
 #include <iostream>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -30,7 +31,12 @@ int main(){
         if(write(fd, comanda.c_str(), comanda.size())==-1){
             perror("Err");
         }
+        if (comanda=="quit\n"){
+            cout<<"haipa"<<endl;
+            break;
+        }
     }
     close(fd);
+    close(fd2);
     return 0;
 }
