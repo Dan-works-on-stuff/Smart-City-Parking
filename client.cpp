@@ -27,11 +27,10 @@ int main(){
     while(true){
         cout << "Introduceti mesajul de trimis: ";
         getline(cin, comanda);
-        comanda +='\n';
         if(write(fd, comanda.c_str(), comanda.size())==-1){
             perror("Err");
         }
-        if (comanda=="quit\n"){
+        if (comanda=="quit"){
             cout<<"haipa"<<endl;
             break;
         }
