@@ -156,6 +156,8 @@ using namespace std;
 
 bool logat = false;
 
+void afis(string s) { cout << s << endl; }
+
 string trim(const string &str) { // e momentul sa ma dau mare
   size_t first = str.find_first_not_of(" \n\r\t");
   size_t last = str.find_last_not_of(" \n\r\t");
@@ -166,9 +168,43 @@ string trim(const string &str) { // e momentul sa ma dau mare
 const char *fifo_path = "/home/dan/Documents/CN2/fifoboss";
 const char *fifo_path2 = "/home/dan/Documents/CN2/fifosclav";
 
+int fd = open(fifo_path, O_RDONLY);
+int fd2 = open(fifo_path2, O_WRONLY);
+
+int testuser(string comanda){
+  string username = trim(comanda.substr(6)); // ba daca nici acum nu imi vede usernameurile din config dau Alt+F4
+    ifstream configfile("config.txt");
+    if (!configfile) {
+      return 1;
+    }
+
+    string linie;
+    bool found = false;
+    while (getline(configfile, linie)) {
+      if (username == trim(linie)) {
+        found = true;
+        configfile.close();
+        return 3;
+      }
+    }
+    configfile.close();
+    if (!found){
+      return 2; 
+    }  
+}
+
+// void returnstatus(int s){
+//   switch(s)
+//   { case(1):
+//     cerr << "err la txt-ul cu useri" << endl;
+//     return;
+//   }
+//   if()
+// }
+
 void forcestop(string comanda) {
   if (strcmp(comanda.c_str(), "quit") == 0) {
-    cout << "haipa" << endl;
+    afis("haipa");
     raise(SIGTSTP);
   }
 }
@@ -177,32 +213,36 @@ void loginprocess(string comanda) {
   if (!(strncmp(comanda.c_str(), "login:", 6) == 0))
     return;
 
-  if(logat){
-    cout<<"deja esti logat wtf man"<<endl;
+  if (logat) {
+    afis("deja esti logat wtf man");
     return;
   }
-  string username = trim(comanda.substr(6)); // ba daca nici acum nu imi vede usernameurile din config dau Alt+F4
-  
-  ifstream configfile("config.txt");
-  if (!configfile) {
-    cerr << "err la txt-ul cu useri" << endl;
+  int tava[2];
+  pipe(tava);
+
+  pid_t pid = fork();
+  if (pid < 0) {
+    afis("err fork");
     return;
   }
-  
-  string linie;
-  bool found = false;
-  while (getline(configfile, linie)) {
-    if (username == trim(linie)) {
-      cout << "se permite accesul esti pe lista bosane" << endl;
-      found = true;
-      logat=true;
-      break;
-    }
+  if (pid == 0) {
+    close(tava[0]);
+    int status=testuser(comanda);
+    write(tava[1],&status,sizeof(int)); //int are 4 bytes
+    close(tava[1]);
   }
-  if (!found)
-    cout << "no access, user is not on the list, GTFO" << endl,
-        configfile.close();
+  else {
+    close(tava[1]);
+    int status;
+    read(tava[0],&status,sizeof(int));
+    close(tava[0]);
+    string s=to_string(status);
+    if(write(fd2, s.c_str(), s.size())==-1){
+            perror("Err");
+      }
   }
+}
+
 
 int main() {
   if (access(fifo_path, F_OK) != -1) {
@@ -227,8 +267,7 @@ int main() {
     }
     cout << "FIFO pt scriere creat" << endl;
   } // creat fifo2 pt sv->client
-  int fd = open(fifo_path, O_RDONLY);
-  int fd2 = open(fifo_path2, O_WRONLY);
+
   if (fd == -1) {
     perror("Eroare la deschidere FIFO pt citire");
     return 1;
@@ -238,7 +277,7 @@ int main() {
     return 1;
   }
   char buffer[100];
-  
+
   for (int i = 0; i < 1000; i++) {
     int bytes_read = read(fd, buffer, sizeof(buffer) - 1);
     if (bytes_read > 0) {
@@ -247,6 +286,8 @@ int main() {
       cout << "Serverul a primit: " << buffer << endl;
       forcestop(comanda);
       loginprocess(comanda);
+
+      write(fd2," ",sizeof(" "));
     }
   }
   return 0;
