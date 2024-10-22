@@ -28,12 +28,13 @@ const char *fifo_path = "/home/dan/Documents/CN2/fifoboss";
 const char *fifo_path2 = "/home/dan/Documents/CN2/fifosclav";
 int main() {
   int pipe_fd[2];
-  if(pipe(pipe_fd)==-1){
-    cerr<<"eroare la pipe"<<endl;
+  if (pipe(pipe_fd) == -1) {
+    cerr << "eroare la pipe" << endl;
     return 1;
   }
   if (access(fifo_path, F_OK) != -1) {
-    cout << "FIFO-ul pt citire exista deja. Se va folosi FIFO-ul existent." << endl;
+    cout << "FIFO-ul pt citire exista deja. Se va folosi FIFO-ul existent."
+         << endl;
   } else {
     // Crearea FIFO-ului
     if (mkfifo(fifo_path, 0666) == -1) {
@@ -43,7 +44,8 @@ int main() {
     cout << "FIFO pt citire creat" << endl;
   } // creat fifo1 pt client->sv
   if (access(fifo_path2, F_OK) != -1) {
-    cout << "FIFO-ul pt scriere exista deja. Se va folosi FIFO-ul existent." << endl;
+    cout << "FIFO-ul pt scriere exista deja. Se va folosi FIFO-ul existent."
+         << endl;
   } else {
     // Crearea FIFO-ului
     if (mkfifo(fifo_path2, 0666) == -1) {
@@ -64,7 +66,7 @@ int main() {
   }
 
   char buffer[100];
-  bool logat=false;
+  bool logat = false;
 
   while (true) {
     int bytes_read = read(fd, buffer, sizeof(buffer) - 1);
@@ -72,25 +74,22 @@ int main() {
       buffer[bytes_read] = '\0'; // terminator de string
       string comanda = trim(string(buffer));
       cout << "Serverul a primit: " << buffer << endl;
-      if(strcmp(comanda.c_str(), "quit")==0){
-          cout<<"haipa"<<endl;
-          raise(SIGTSTP);
-        }
-      if(strcmp(comanda.c_str(), "logout")==0 && logat==true){
-          cout<<"iti urez o zi ok"<<endl;
-          logat=false;
-          write(pipe_fd[1], "0",2);
-        }
-      else if(strcmp(comanda.c_str(), "logout")==0&& logat==false)
-          cout<<"nu exista nici un user logat"<<endl;
+      if (strcmp(comanda.c_str(), "quit") == 0) {
+        cout << "haipa" << endl;
+        raise(SIGTSTP);
+      }
+      if (strcmp(comanda.c_str(), "logout") == 0 && logat == true) {
+        cout << "iti urez o zi ok" << endl;
+        logat = false;
+      } else if (strcmp(comanda.c_str(), "logout") == 0 && logat == false)
+        cout << "nu exista nici un user logat" << endl;
 
       pid_t pid = fork();
-      
+
       if (pid == 0) {
         close(pipe_fd[0]);
         if (strncmp(comanda.c_str(), "login:", 6) == 0) {
           string username = trim(comanda.substr(6)); // ba daca nici acum nu imi vede usernameurile din config dau Alt+F4
-
           ifstream configfile("config.txt");
           if (!configfile)
             cerr << "err la txt-ul cu useri" << endl;
@@ -101,25 +100,38 @@ int main() {
               if (username == trim(linie)) {
                 cout << "se permite accesul esti pe lista bosane" << endl;
                 found = true;
-                write(pipe_fd[1],"1",2);
+                write(pipe_fd[1], "1", 2);
                 break;
               }
             }
             if (!found)
-              cout << "no access, user is not on the list, GTFO" << endl;
+              cout << "no access, user is not on the list, GTFO" << endl,
+                  write(pipe_fd[1], "0", 2);
             configfile.close();
           }
         }
+        close(pipe_fd[1]);
         _exit(0);
       } else if (pid < 0) {
         cerr << "fork pa" << endl;
+      } else {
+        waitpid(pid,NULL, 0);
+        char rez[2];
+        close(pipe_fd[1]);
+        read(pipe_fd[0], rez, 2);
+
+        if (rez[0] == '1')
+          logat = true;
+        else
+          logat = false;
       }
-    
+      
     } else if (bytes_read == -1)
       cerr << "err" << endl;
   }
 
   close(fd);
   close(fd2);
+  close(pipe_fd[0]);
   return 0;
 }
