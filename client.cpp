@@ -9,6 +9,7 @@ using namespace std;
 
 const char *fifo_path = "/home/dan/Documents/CN2/fifoboss";
 const char *fifo_path2 = "/home/dan/Documents/CN2/fifosclav";
+
 string trim(const string &str) { // e momentul sa ma dau mare
   size_t first = str.find_first_not_of(" \n\r\t");
   size_t last = str.find_last_not_of(" \n\r\t");
@@ -26,22 +27,22 @@ int main() {
   int fd2 = open(fifo_path2, O_RDONLY);
   if (fd == -1) {
     perror("Eroare la deschidere FIFO2 pentru citire");
+    close (fd);
     return 1;
   } // deschidem fifo2 pt citire
   string comanda;
   char buffer[100];
   int flag = true;
   while (true) {
-    if (flag == true)
-      flag = false;
-    else {
-      int bytes_read = read(fd2, buffer, sizeof(buffer) - 1);
+    if(!flag){
+      int bytes_read = read(fd2, buffer, sizeof(buffer));
       if (bytes_read > 0) {
         buffer[bytes_read] = '\0'; // terminator de string
         string comanda = trim(string(buffer));
-        cout << "Client: " << buffer << endl;
+        cout << "Client: " << comanda << endl;
       }
     }
+    flag=false;
     cout << "Introduceti mesajul de trimis: ";
     getline(cin, comanda);
     if (write(fd, comanda.c_str(), comanda.size()) == -1) {

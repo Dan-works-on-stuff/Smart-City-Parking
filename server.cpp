@@ -137,6 +137,7 @@
 // }
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <fcntl.h>
 #include <fstream>
@@ -155,8 +156,17 @@
 using namespace std;
 
 bool logat = false;
+const char *fifo_path = "/home/dan/Documents/CN2/fifoboss";
+const char *fifo_path2 = "/home/dan/Documents/CN2/fifosclav";
+int fd = open(fifo_path, O_RDONLY);
+int fd2 = open(fifo_path2, O_WRONLY);
 
-void afis(string s) { cout << s << endl; }
+void afis(string s) { 
+  printf("%s\n",s.c_str());
+  if(write(fd2, s.c_str(), s.size())==-1){
+    perror("err afis");
+  } 
+}
 
 string trim(const string &str) { // e momentul sa ma dau mare
   size_t first = str.find_first_not_of(" \n\r\t");
@@ -165,11 +175,6 @@ string trim(const string &str) { // e momentul sa ma dau mare
     return "";
   return str.substr(first, last - first + 1);
 }
-const char *fifo_path = "/home/dan/Documents/CN2/fifoboss";
-const char *fifo_path2 = "/home/dan/Documents/CN2/fifosclav";
-
-int fd = open(fifo_path, O_RDONLY);
-int fd2 = open(fifo_path2, O_WRONLY);
 
 int testuser(string comanda){
   string username = trim(comanda.substr(6)); // ba daca nici acum nu imi vede usernameurile din config dau Alt+F4
@@ -190,20 +195,22 @@ int testuser(string comanda){
     configfile.close();
     if (!found){
       return 2; 
-    }  
+    }
+    return 0; 
 }
 
-// void returnstatus(int s){
-//   switch(s)
-//   { case(1):
-//     cerr << "err la txt-ul cu useri" << endl;
-//     return;
-//   }
-//   if()
-// }
+void returnstatus(int status, string &response){
+    if (status == 1) {
+      response = "config.txt not found";
+    } else if (status == 2) {
+      response = "user not on the list";
+    } else if (status == 3) {
+      response = "access allowed you are on the list";
+    }
+}
 
 void forcestop(string comanda) {
-  if (strcmp(comanda.c_str(), "quit") == 0) {
+  if (comanda=="quit") {
     afis("haipa");
     raise(SIGTSTP);
   }
@@ -230,20 +237,29 @@ void loginprocess(string comanda) {
     int status=testuser(comanda);
     write(tava[1],&status,sizeof(int)); //int are 4 bytes
     close(tava[1]);
+    exit(1);
   }
   else {
     close(tava[1]);
     int status;
     read(tava[0],&status,sizeof(int));
     close(tava[0]);
-    string s=to_string(status);
-    if(write(fd2, s.c_str(), s.size())==-1){
-            perror("Err");
-      }
+    string response;
+    returnstatus(status, response);
+    if(status==3){
+      logat=true;
+    }
+    afis(response);
   }
 }
 
-
+void logout(string comanda){
+  if(strcmp(comanda.c_str(), "logout") == 0)
+    if(logat==true)
+      logat=false;
+    else
+      afis("no user is logged in brev");
+}
 int main() {
   if (access(fifo_path, F_OK) != -1) {
     cout << "FIFO-ul pt citire exista deja. Se va folosi FIFO-ul existent."
@@ -283,11 +299,13 @@ int main() {
     if (bytes_read > 0) {
       buffer[bytes_read] = '\0'; // terminator de string
       string comanda = trim(string(buffer));
-      cout << "Serverul a primit: " << buffer << endl;
+      cout << "Serverul a primit: " << comanda << endl;
       forcestop(comanda);
       loginprocess(comanda);
-
-      write(fd2," ",sizeof(" "));
+      logout(comanda);
+      if(!(comanda.substr(0,6)=="login:" || comanda=="quit")){
+        afis(comanda);
+      }
     }
   }
   return 0;
