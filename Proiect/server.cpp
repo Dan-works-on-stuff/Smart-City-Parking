@@ -5,12 +5,13 @@
 #include <unistd.h>
 #include <netinet/tcp.h>
 #include <cstdio>
-#include<cstring>
+#include <cstring>
 #include <string>
 #include <cerrno>
 #include <sys/select.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <string>
 using namespace std;
 
 void create_socket(int& serversocket) {
@@ -66,6 +67,16 @@ void accept_socket(int& serversocket, int& acceptsocket) {
     else cout<<"se accepta()"<<endl;
 }
 
+void send_data(int &acceptsocket, const string &mesaj) {
+    const char* buffer = mesaj.c_str();
+    size_t buffer_len = mesaj.length();
+    int bytes_sent= send(acceptsocket, buffer, buffer_len, 0);
+    if (bytes_sent ==-1) {
+        cerr<<"send() failed: "<< strerror(errno)<<endl;
+    }
+    else cout<<"Server: sent "<< bytes_sent << " bytes"<<endl;
+}
+
 int main() {
     int socketfd=-1;
     create_socket(socketfd);
@@ -73,5 +84,8 @@ int main() {
     socket_listens(socketfd);
     int acceptsocketfd=-1;
     accept_socket(socketfd,acceptsocketfd);
+    string message;
+    getline(cin, message);
+    send_data(acceptsocketfd,message);
     return 0;
 }
