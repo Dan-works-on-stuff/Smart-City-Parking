@@ -67,14 +67,23 @@ void accept_socket(int& serversocket, int& acceptsocket) {
     else cout<<"se accepta()"<<endl;
 }
 
-void send_data(int &acceptsocket, const string &mesaj) {
-    const char* buffer = mesaj.c_str();
-    size_t buffer_len = mesaj.length();
-    int bytes_sent= send(acceptsocket, buffer, buffer_len, 0);
-    if (bytes_sent ==-1) {
-        cerr<<"send() failed: "<< strerror(errno)<<endl;
+// void send_data(int &acceptsocket, const string &mesaj) {
+//     const char* buffer = mesaj.c_str();
+//     size_t buffer_len = mesaj.length();
+//     int bytes_sent= send(acceptsocket, buffer, buffer_len, 0);
+//     if (bytes_sent ==-1) {
+//         cerr<<"send() failed: "<< strerror(errno)<<endl;
+//     }
+//     else cout<<"Server: sent "<< bytes_sent << " bytes"<<endl;
+// }
+
+void receive_data(int &acceptsocket, struct sockaddr_in &serverService) {
+    char buffer[200];
+    int bytes_received = recv(acceptsocket, buffer, sizeof(buffer), 0);
+    if (bytes_received==-1) {
+        cerr<<"Error with the connection(): "<< strerror(errno)<<endl;
+        //close(clientsocket);
     }
-    else cout<<"Server: sent "<< bytes_sent << " bytes"<<endl;
 }
 
 int main() {
@@ -84,9 +93,11 @@ int main() {
     socket_listens(socketfd);
     int acceptsocketfd=-1;
     accept_socket(socketfd,acceptsocketfd);
-    string message;
-    cout<<"Enter message to send"<<endl;
-    getline(cin, message);
-    send_data(acceptsocketfd,message);
+    struct sockaddr_in server_service;
+    receive_data(acceptsocketfd, server_service);
+//    string message;
+//    cout<<"Enter message to send"<<endl;
+//    getline(cin, message);
+//    send_data(acceptsocketfd,message);
     return 0;
 }
