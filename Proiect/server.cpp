@@ -30,9 +30,9 @@ void bind_socket(int& serversocket, int port) {
     addr.sin_port = htons(port);
     inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr); //setup pentru test local 127.0.0.1 = adresa masinii (LOOPBACK ADDRESS)
     if (bind(serversocket, (struct sockaddr *)&addr,sizeof(addr))==-1) {    //bind() expects a pointer to a struct sockaddr
-                                                                                //addr este pasat ca referinta pentru ca daca ar fi fost pasat sub forma de copie, orice
+                                                                                //addr este pasat ca referinta pentru ca daca ar fi fost pasat sub forma de copie, orice modificare
                                                                                 // facuta la variabila addr nu s-ar fi reflectat si in functia bind si viceversa
-                                                                                //struct sockaddr is a more general structure (works with IPv4 and could work with IPv6
+                                                                                //struct sockaddr is a more general structure (works with IPv4 and could work with IPv6)
         cerr<<"bind() failed: "<<strerror(errno)<<endl;
         close(serversocket);
         exit(1);
@@ -54,6 +54,8 @@ void socket_listens(int& serversocket) {
 //accept(socket, struct sockaddr* addr, int* addrlen)  sockaddr* addr este adresa clientului, e folositor daca vrei sa accepti informatii doar de la un client anume.
                                                      //int* addrlen size of the address structure ^^
 //RETURNS A VALUE OF TYPE INT!! mai exact un ALT SOCKET, o DUBLURA cu acelasi PORT si IP_adress cu care comunica explicit cu clientul desemnat.
+
+//de modificat: in acest moment serverul NU este concurent, networkingul se face sincron
 
 void accept_socket(int& serversocket, int& acceptsocket) {
     acceptsocket=accept(serversocket, NULL, NULL);
