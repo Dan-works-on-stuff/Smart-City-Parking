@@ -85,6 +85,7 @@ int main() {
     int acceptsocketfd=-1;
     accept_socket(socketfd,acceptsocketfd);
     string message;
+    cout<<"Enter message to send"<<endl;
     getline(cin, message);
     send_data(acceptsocketfd,message);
     return 0;
