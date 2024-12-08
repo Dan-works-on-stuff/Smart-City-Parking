@@ -13,9 +13,13 @@
 #include <unistd.h>
 #include <string>
 #include <sys/epoll.h>
+#include <vector>
+#include<stdexcept>
 using namespace std;
 
 const int MAX_ETAJE = 10;
+int client_count;
+vector<vector<bool>*> clients;
 
 void create_socket(int& serversocket) {
     serversocket=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -70,7 +74,7 @@ void accept_socket(int& serversocket, int& acceptsocket) {
     else cout<<"se accepta()"<<endl;
 }
 
-void receive_data(int &acceptsocket, struct sockaddr_in &serverService, string& message) {
+void receive_data(int &acceptsocket, string& message) {
     char buffer[200];
     int bytes_received = recv(acceptsocket, buffer, sizeof(buffer), 0);
     if (bytes_received<0) {
@@ -80,10 +84,14 @@ void receive_data(int &acceptsocket, struct sockaddr_in &serverService, string& 
     else if (bytes_received==0) {
         cout<<"client disconnected"<<endl;
         close(acceptsocket);
+        client_count--;
     }
     else{
         buffer[bytes_received]='\0';
         message = buffer;
+        if (message=="pa") {
+            return;
+        }
         cout<<"received data: "<<message<<endl;
     }
 }
@@ -95,7 +103,7 @@ void send_data(int &acceptsocket, const string &mesaj) {
     if (bytes_sent ==-1) {
         cerr<<"send() failed: "<< strerror(errno)<<endl;
     }
-    else cout<<"Server: sent "<< bytes_sent << " bytes"<<endl;
+    else cout<<"Server: sent "<< bytes_sent << " bytes ("<<mesaj<<')'<<endl;
 }
 
 void handle_client(int epollfd, int serversocket) {
@@ -105,33 +113,47 @@ void handle_client(int epollfd, int serversocket) {
         cerr<<"accept() failed: "<<strerror(errno)<<endl;
         return;
     }
+    vector<bool>* clientData = new vector<bool>;
+    clients.push_back(clientData);
     ev.events=EPOLLIN;
     ev.data.fd=clientsocket;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, clientsocket, &ev)==-1) {
         cerr<<"epoll_ctl() failed"<<strerror(errno)<<endl;
         close(clientsocket);
+        delete clientData;
         return;
     }
-    cout<<"New client connected"<<endl;
+    cout<<"New client connected (Index: "<<clients.size()-1<<')'<<endl;
+    client_count++;
 }
 
 void handle_communication(int epollfd, int clientsocket) {
-    struct sockaddr_in server_service;
     string message;
-    receive_data(clientsocket, server_service, message);
+    receive_data(clientsocket, message);
     if (message=="pa") {
-        cout<<"client requested to end the chat."<<endl;
+        cout<<"One client requested to end the chat."<<endl;
         close(clientsocket);
-        exit(0);
+        client_count--;
+        return;
     }
-    cout<<"enter message to be sent: "<<endl;
-    getline(cin, message);
+    bool ok=1;
+    try {
+        int number = stoi(message);
+        cout<<"Locul de parcare "<<number<<" a fost accesat"<<endl; // de modificat ca sa spuna ca a fost ocupat/eliberat
+    }catch (const invalid_argument& e) {
+        cerr<<"Invalid value received (not a number)"<<endl;
+        ok=0;
+    }catch (const out_of_range& e) {
+        cerr<<"Number out of range"<<endl;
+        ok=0;
+    }
+    if (ok) {
+        message="Parking spot marked successfully!";
+    }
+    else {
+        message="Error: invalid value entered";
+    }
     send_data(clientsocket, message);
-    if (message=="pa") {
-        cout<<"Server requested to end the chat."<<endl;
-        close(clientsocket);
-        exit(0);
-    }
 }
 
 int setup_epoll(int serversocket) {
@@ -151,51 +173,39 @@ int setup_epoll(int serversocket) {
     return epollfd;
 }
 
+// void check_connection(int nfds) {
+//     if (nfds==1) {
+//
+//     }
+// }
+
 
 int main() {
     int serversocketfd=-1;
     create_socket(serversocketfd);
     bind_socket(serversocketfd, 55555);
     socket_listens(serversocketfd);
-    // int acceptsocketfd=-1;
-    // accept_socket(socketfd,acceptsocketfd);
-    // struct sockaddr_in server_service;
-    // string mesaj_primit;
-    // string mesaj;
-    // do {
-    //     receive_data(acceptsocketfd, server_service, mesaj_primit);
-    //     cout << "Received message: " << mesaj_primit << endl;
-    //     if (mesaj_primit == "pa") {
-    //         cout << "Client requested to end the chat." << endl;
-    //         break;
-    //     }
-    //                                                                              implementare facuta pt un server sincron, nu asincron
-    //     cout << "Enter message to send: " << endl;
-    //     getline(cin, mesaj);
-    //     send_data(acceptsocketfd, mesaj);
-    //     if (mesaj == "pa") {
-    //         cout << "Server requested to end the chat." << endl;
-    //         break;
-    //     }
-    // } while (true);
-    // close(acceptsocketfd);
-    // close(socketfd);
+
     int epollfd=setup_epoll(serversocketfd);
 
     struct epoll_event etaje[MAX_ETAJE];
     while (true) {
         int nfds=epoll_wait(epollfd, etaje, MAX_ETAJE, -1);
         if (nfds==-1) {
+            if (client_count==0) {
+                break;
+            }
             cerr<<"epoll_wait() failed: "<<strerror(errno)<<endl;
-            close(epollfd);
-            close(serversocketfd);
-            exit(1);
         }
         for (int i=0; i<nfds; i++) {
             if (etaje[i].data.fd==serversocketfd) {
                 handle_client(epollfd, serversocketfd);
             }
             else handle_communication(epollfd, etaje[i].data.fd);
+        }
+        if (client_count==0) {
+            cout<<"No more clients remaining, shutting down."<<endl;
+            break;
         }
     }
     close(epollfd);
