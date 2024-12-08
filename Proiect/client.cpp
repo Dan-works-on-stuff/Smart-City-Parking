@@ -141,9 +141,7 @@ int main() {
         int nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
         if (nfds==-1) {
             cerr<<"epoll_wait() failed: "<<strerror(errno)<<endl;
-            close(epollfd);
-            close(client_socket);
-            exit(1);
+            break;
         }
         if (nfds>0) {
             handle_user_input(client_socket);
