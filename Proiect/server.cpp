@@ -19,7 +19,7 @@ using namespace std;
 
 const int MAX_ETAJE = 10;
 int client_count;
-vector<vector<bool>*> clients;
+vector<vector<bool>*> clients;  //fiecarui client i se asociaza un vector iar vectorul cel mare ce tine toate locurile de parcare este un vector de pointeri.
 
 void create_socket(int& serversocket) {
     serversocket=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -84,7 +84,7 @@ void receive_data(int &acceptsocket, string& message) {
     else if (bytes_received==0) {
         cout<<"client disconnected"<<endl;
         close(acceptsocket);
-        client_count--;
+        client_count--;     //o implementare posibila pentru ca serverul sa se inchida odata ce ultimul client conectat se deconecteaza.
     }
     else{
         buffer[bytes_received]='\0';
@@ -113,7 +113,7 @@ void handle_client(int epollfd, int serversocket) {
         cerr<<"accept() failed: "<<strerror(errno)<<endl;
         return;
     }
-    vector<bool>* clientData = new vector<bool>;
+    vector<bool>* clientData = new vector<bool>;   ///se adauga cate un vector nou de fiecare data cand se identifica un nou client
     clients.push_back(clientData);
     ev.events=EPOLLIN;
     ev.data.fd=clientsocket;
@@ -123,7 +123,7 @@ void handle_client(int epollfd, int serversocket) {
         delete clientData;
         return;
     }
-    cout<<"New client connected (Index: "<<clients.size()-1<<')'<<endl;
+    cout<<"New client connected (Index: "<<clients.size()-1<<')'<<endl;  //implementare temporara
     client_count++;
 }
 
