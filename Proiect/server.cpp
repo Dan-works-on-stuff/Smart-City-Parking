@@ -173,12 +173,6 @@ int setup_epoll(int serversocket) {
     return epollfd;
 }
 
-// void check_connection(int nfds) {
-//     if (nfds==1) {
-//
-//     }
-// }
-
 
 int main() {
     int serversocketfd=-1;

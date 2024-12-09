@@ -115,25 +115,6 @@ int main() {
     create_socket(client_socket);
     struct sockaddr_in client_service;
     connect_socks(client_socket, client_service);
-    // string message;
-    // string mesaj_primit;
-    // do {
-    //     cout << "Enter message to send: " << endl;
-    //     getline(cin, message);
-    //     send_data(client_socket, message);
-    //     if (message == "pa") {
-    //         cout << "Client requested to end the chat." << endl;
-    //         break;
-    //     }
-    //                                                                         implementarea asta era pentru un server sincron, nu concurent
-    //     receive_data(client_socket, client_service, mesaj_primit);
-    //     cout << "Received message: " << mesaj_primit << endl;
-    //     if (mesaj_primit == "pa") {
-    //         cout << "Server requested to end the chat." << endl;
-    //         break;
-    //     }
-    // } while (true);
-    // close(client_socket);
     int epollfd =setup_epoll(client_socket);
     const int MAX_EVENTS=1;
     struct epoll_event events[MAX_EVENTS];
