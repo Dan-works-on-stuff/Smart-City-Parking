@@ -1,52 +1,10 @@
-#include <iostream>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <netinet/tcp.h>
-#include <cstdio>
-#include <cstring>
-#include <string>
-#include <cerrno>
-#include <sys/select.h>
-#include <sys/time.h>
-#include <unistd.h>
-#include <string>
-#include <sys/epoll.h>
-#include <vector>
-#include<stdexcept>
+#include "functions.h"
+
 using namespace std;
 
-const int MAX_ETAJE = 10;
+const int MAX_ETAJE = 100;
 int client_count;
 vector<vector<bool>*> clients;  //fiecarui client i se asociaza un vector iar vectorul cel mare ce tine toate locurile de parcare este un vector de pointeri.
-
-void create_socket(int& serversocket) {
-    serversocket=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (serversocket == -1) {
-        cerr<<"Error at socket()"<<strerror(errno)<<endl;
-        exit(1);
-    }
-    else cout<<"socket() is ok"<<endl;
-    //close(serversocket);
-}
-
-void bind_socket(int& serversocket, int port) {
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr)); //asignez la toti bytes valoarea 0 pt ca am declarat structul local
-    addr.sin_family = AF_INET; //IPv4, maybe switch to IPv6 later
-    addr.sin_port = htons(port);
-    inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr); //setup pentru test local 127.0.0.1 = adresa masinii (LOOPBACK ADDRESS)
-    if (bind(serversocket, (struct sockaddr *)&addr,sizeof(addr))==-1) {    //bind() expects a pointer to a struct sockaddr
-                                                                                //addr este pasat ca referinta pentru ca daca ar fi fost pasat sub forma de copie, orice modificare
-                                                                                // facuta la variabila addr nu s-ar fi reflectat si in functia bind si viceversa
-                                                                                //struct sockaddr is a more general structure (works with IPv4 and could work with IPv6)
-        cerr<<"bind() failed: "<<strerror(errno)<<endl;
-        close(serversocket);
-        exit(1);
-    }
-    else cout<<"bind() OK"<<endl;
-}
 
 // listen(socket, int backlog); backlog=limita de clienti pt socket
 
@@ -64,15 +22,6 @@ void socket_listens(int& serversocket) {
 //RETURNS A VALUE OF TYPE INT!! mai exact un ALT SOCKET, o DUBLURA cu acelasi PORT si IP_adress cu care comunica explicit cu clientul desemnat.
 
 //de modificat: in acest moment serverul NU este concurent, networkingul se face sincron
-
-void accept_socket(int& serversocket, int& acceptsocket) {
-    acceptsocket=accept(serversocket, NULL, NULL);
-    if (acceptsocket==-1) {
-        cerr<<"accept() failed: "<< strerror(errno)<<endl;
-        exit(1);
-    }
-    else cout<<"se accepta()"<<endl;
-}
 
 void receive_data(int &acceptsocket, string& message) {
     char buffer[200];

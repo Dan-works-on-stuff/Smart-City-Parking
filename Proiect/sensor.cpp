@@ -1,32 +1,7 @@
-//
-// Created by maxcox on 12/4/24.
-//
+#include "functions.h"
 
-#include <iostream>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <netinet/tcp.h>
-#include <cstdio>
-#include<cstring>
-#include <string>
-#include <cerrno>
-#include <sys/select.h>
-#include <sys/time.h>
-#include <unistd.h>
-#include <sys/epoll.h>
+
 using namespace std;
-
-void create_socket(int& clientsocket) {
-    clientsocket=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (clientsocket == -1) {
-        cerr<<"Error at socket()"<<strerror(errno)<<endl;
-        exit(1);
-    }
-    else cout<<"socket() is ok"<<endl;
-    //close(serversocket);
-}
 
 void connect_socks(int &clientsocket, struct sockaddr_in &clientService) {
     clientService.sin_family=AF_INET;
@@ -40,7 +15,6 @@ void connect_socks(int &clientsocket, struct sockaddr_in &clientService) {
     cout<<"Client: connect() is OK."<<endl;
     cout<<"Client: Can start sending and receiving data..."<<endl;
 }
-
 
 void send_data(int &clientsocket, const string &mesaj) {
     const char* buffer = mesaj.c_str();
