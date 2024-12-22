@@ -3,6 +3,8 @@
 
 using namespace std;
 
+void create_socket(int& serversocket);
+
 void connect_socks(int &clientsocket, struct sockaddr_in &clientService) {
     clientService.sin_family=AF_INET;
     inet_pton(AF_INET, "127.0.0.1", &clientService.sin_addr);  //informatiile pentru a conecta socketurile intre ele
@@ -23,19 +25,19 @@ void send_data(int &clientsocket, const string &mesaj) {
     if (bytes_sent ==-1) {
         cerr<<"send() failed: "<< strerror(errno)<<endl;
     }
-    else cout<<"Client: sent "<< bytes_sent << " bytes"<<endl;
+    else cout<<"sensor: sent "<< bytes_sent << " bytes"<<endl;
 }
 
-void receive_data(int &clientsocket, string& message) {
+void receive_data(int &sensorsocket, string& message) {
   char buffer[200];
-  int bytes_received=recv(clientsocket, buffer, sizeof(buffer), 0);
+  int bytes_received=recv(sensorsocket, buffer, sizeof(buffer), 0);
   if (bytes_received<0) {
         cerr<<"Error with the connection(): "<< strerror(errno)<<endl;
         exit(1);
   }
   else if (bytes_received==0) {
       cout<<"Server disconnected."<<endl;
-      close(clientsocket);
+      close(sensorsocket);
       exit(1);
   }
   else{
@@ -45,19 +47,19 @@ void receive_data(int &clientsocket, string& message) {
   }
 }
 
-void handle_user_input(int clientsocket) {
+void handle_user_input(int sensorsocket) {
     string message;
     cout<<"Enter message to send: "<<endl;
     getline(cin, message);
-    send_data(clientsocket, message);
+    send_data(sensorsocket, message);
     if (message=="pa") {
-        cout<<"Client requested to end the chat"<<endl;
-        close(clientsocket);
+        cout<<"sensor requested to end the chat"<<endl;
+        close(sensorsocket);
         exit(0);
     }
 }
 
-int setup_epoll(int clientsocket) {
+int setup_epoll(int sensorsocket) {
     int epollfd = epoll_create1(0);
     if (epollfd==-1) {
         cerr<<"epoll_create1() failed: "<< strerror(errno)<<endl;
@@ -65,8 +67,8 @@ int setup_epoll(int clientsocket) {
     }
     struct epoll_event ev;
     ev.events = EPOLLIN | EPOLLOUT;
-    ev.data.fd = clientsocket;
-    if (epoll_ctl(epollfd,EPOLL_CTL_ADD, clientsocket, &ev)==-1) {
+    ev.data.fd = sensorsocket;
+    if (epoll_ctl(epollfd,EPOLL_CTL_ADD, sensorsocket, &ev)==-1) {
         cerr<<"epoll_ctl() failed: "<<strerror(errno)<<endl;
         close(epollfd);
         exit(1);
@@ -74,22 +76,22 @@ int setup_epoll(int clientsocket) {
     return epollfd;
 }
 
-void handle_server_data(int clientsocket) {
+void handle_server_data(int sensorsocket) {
     string message;
-    receive_data(clientsocket, message);
+    receive_data(sensorsocket, message);
     if (message=="pa") {
         cout<<"Server requested to end the chat."<<endl;
-        close(clientsocket);
+        close(sensorsocket);
         exit(0);
     }
 }
 
 int main() {
-    int client_socket=-1;
-    create_socket(client_socket);
-    struct sockaddr_in client_service;
-    connect_socks(client_socket, client_service);
-    int epollfd =setup_epoll(client_socket);
+    int sensor_socket=-1;
+    create_socket(sensor_socket);
+    struct sockaddr_in sensor_service;
+    connect_socks(sensor_socket, sensor_service);
+    int epollfd =setup_epoll(sensor_socket);
     const int MAX_EVENTS=1;
     struct epoll_event events[MAX_EVENTS];
     while (true) {
@@ -99,11 +101,11 @@ int main() {
             break;
         }
         if (nfds>0) {
-            handle_user_input(client_socket);
-            handle_server_data(client_socket);
+            handle_user_input(sensor_socket);
+            handle_server_data(sensor_socket);
         }
     }
     close(epollfd);
-    close(client_socket);
+    close(sensor_socket);
     return 0;
 }

@@ -6,6 +6,9 @@ const int MAX_ETAJE = 100;
 int client_count;
 vector<vector<bool>*> clients;  //fiecarui client i se asociaza un vector iar vectorul cel mare ce tine toate locurile de parcare este un vector de pointeri.
 
+void create_socket(int& serversocket);
+void bind_socket(int& serversocket, int port);
+
 // listen(socket, int backlog); backlog=limita de clienti pt socket
 
 void socket_listens(int& serversocket) {
@@ -20,8 +23,6 @@ void socket_listens(int& serversocket) {
 //accept(socket, struct sockaddr* addr, int* addrlen)  sockaddr* addr este adresa clientului, e folositor daca vrei sa accepti informatii doar de la un client anume.
                                                      //int* addrlen size of the address structure ^^
 //RETURNS A VALUE OF TYPE INT!! mai exact un ALT SOCKET, o DUBLURA cu acelasi PORT si IP_adress cu care comunica explicit cu clientul desemnat.
-
-//de modificat: in acest moment serverul NU este concurent, networkingul se face sincron
 
 void receive_data(int &acceptsocket, string& message) {
     char buffer[200];
