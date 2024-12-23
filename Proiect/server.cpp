@@ -3,9 +3,17 @@
 using namespace std;
 
 const int MAX_PARCARI = 10;
-vector<vector<bool>*> clients;  //fiecarui client i se asociaza un vector iar vectorul cel mare ce tine toate locurile de parcare este un vector de pointeri.
+
 atomic<bool> admin_access(false);
 atomic <bool> shutdown_requested = false;
+struct FloorMaster {
+    int index;
+    char letter;
+    vector<bool> parking_spots;
+    int FMsock;
+};
+vector<FloorMaster> FM;
+//fiecarui FloorMaster i se asociaza o structura de tipul FloorMaster ce contine chestiile alea
 
 void create_socket(int& serversocket);
 void bind_socket(int& serversocket, int port);
@@ -14,6 +22,7 @@ void receive_data(int &acceptsocket, string& message);
 void send_data(int &acceptsocket, const string &mesaj);
 void handle_new_FloorMaster(int epollfd, int serversocket);
 void handle_communication(int epollfd, int clientsocket);
+void update_parking_spots(int clientsocket, const string& data);
 int setup_epoll(int serversocket);
 void server_executions(int serversocket);
 void admin_listener();
@@ -110,45 +119,64 @@ void handle_new_FloorMaster(int epollfd, int serversocket) {
         cerr<<"accept() failed: "<<strerror(errno)<<endl;
         return;
     }
-    vector<bool>* clientData = new vector<bool>;   ///se adauga cate un vector nou de fiecare data cand se identifica un nou client
-    clients.push_back(clientData);
+    int index=FM.size();
+    if (index>=10) { //nr maxim de etaje, nu bag mana in foc ca ar merge codul bine nici macar cu 10 etaje, is 10 000 de locuri de parcare totusi
+        cerr<<"Max FloorMasters reached!"<<endl;
+        close(clientsocket);
+        return;
+    }
+    char letter= 'A' + index;
+    FloorMaster newFM ={index, letter, vector<bool>(100, false),clientsocket};
+    FM.push_back(newFM);
+
     ev.events=EPOLLIN;
     ev.data.fd=clientsocket;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, clientsocket, &ev)==-1) {
         cerr<<"epoll_ctl() failed"<<strerror(errno)<<endl;
         close(clientsocket);
-        delete clientData;
         return;
     }
-    cout<<"New client connected (Index: "<<clients.size()-1<<')'<<endl;  //implementare temporara
+    cout<<"New FloorMaster connected (Index: "<<index<<" / Letter: "<<letter<<')'<<endl;
 }
 
 void handle_communication(int epollfd, int clientsocket) {
     string message;
     receive_data(clientsocket, message);
     if (message=="pa") {
-        cout<<"One client requested to end the chat."<<endl;
+        cout<<"One FloorMaster requested to end the chat."<<endl;
         close(clientsocket);
         return;
     }
-    bool ok=1;
-    try {
-        int number = stoi(message);
-        cout<<"Locul de parcare "<<number<<" a fost accesat"<<endl; // de modificat ca sa spuna ca a fost ocupat/eliberat
-    }catch (const invalid_argument& e) {
-        cerr<<"Invalid value received (not a number)"<<endl;
-        ok=0;
-    }catch (const out_of_range& e) {
-        cerr<<"Number out of range"<<endl;
-        ok=0;
+    if (message.length()>100 || message.find_first_not_of("01")!=string::npos) {
+        cerr<<"Invalid data received: "<< message<<endl;
+        string response="Error: Invalid parking data format";
+        send_data(clientsocket, response);
+        return;
     }
-    if (ok) {
-        message="Parking spot marked successfully!";
-    }
-    else {
-        message="Error: invalid value entered";
-    }
+    update_parking_spots(clientsocket,  message);
     send_data(clientsocket, message);
+}
+
+void update_parking_spots(int clientsocket, const string& data) {
+    int floorIndex=-1;
+    for (int i=0; i<FM.size(); i++) {
+        if (FM[i].FMsock==clientsocket) {
+            floorIndex=i;
+            break;
+        }
+    }
+    if (floorIndex==-1) {
+        cerr<<"Error: FloorMaster not found for clientsocket "<<clientsocket<<endl;
+        return;
+    }
+    if (data.size()!=FM[floorIndex].parking_spots.size()) {
+        cerr<<"Error: Data size mismatch for FloorMaster "<<floorIndex<<endl;
+        return;
+    }
+    for (int i=0;i<data.size(); i++) {
+        FM[floorIndex].parking_spots[i]=(data[i]=='1');
+    }
+    //trebuie sa configurez ceva aici astfel incat sa am un output intr-un fisier cu toate etajele.
 }
 
 int setup_epoll(int serversocket) {
