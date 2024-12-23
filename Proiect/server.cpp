@@ -3,8 +3,9 @@
 using namespace std;
 
 const int MAX_PARCARI = 10;
-int client_count;
 vector<vector<bool>*> clients;  //fiecarui client i se asociaza un vector iar vectorul cel mare ce tine toate locurile de parcare este un vector de pointeri.
+atomic<bool> admin_access(false);
+bool shutdown_requested = false;
 
 void create_socket(int& serversocket);
 void bind_socket(int& serversocket, int port);
@@ -14,38 +15,51 @@ void send_data(int &acceptsocket, const string &mesaj);
 void handle_client(int epollfd, int serversocket);
 void handle_communication(int epollfd, int clientsocket);
 int setup_epoll(int serversocket);
+void server_executions(int serversocket);
+void admin_listener();
+void admin_commands();
+void signal_handler(int signal);
+void save_server_pid();
+pid_t read_server_pid();
 
 int main() {
+    signal(SIGUSR1, signal_handler);
+
     int serversocketfd=-1;
     create_socket(serversocketfd);
-    bind_socket(serversocketfd, 55555);
+    bind_socket(serversocketfd, 55554);
     socket_listens(serversocketfd);
 
-    int epollfd=setup_epoll(serversocketfd);
+    save_server_pid();
+
+    thread server_thread(server_executions, serversocketfd);
+    thread admin_thread(admin_listener);
+    server_thread.join();
+    admin_thread.join();
+
+    close(serversocketfd);
+    return 0;
+}
+
+void server_executions(int serversocket) {
+    int epollfd=setup_epoll(serversocket);
 
     struct epoll_event etaje[MAX_PARCARI];
-    while (true) {
+    while (!shutdown_requested) {
         int nfds=epoll_wait(epollfd, etaje, MAX_PARCARI, -1);
         if (nfds==-1) {
-            if (client_count==0) {
-                break;
-            }
+            if (errno == EINTR) break;
             cerr<<"epoll_wait() failed: "<<strerror(errno)<<endl;
         }
         for (int i=0; i<nfds; i++) {
-            if (etaje[i].data.fd==serversocketfd) {
-                handle_client(epollfd, serversocketfd);
+            if (etaje[i].data.fd==serversocket) {
+                handle_client(epollfd, serversocket);
             }
             else handle_communication(epollfd, etaje[i].data.fd);
         }
-        if (client_count==0) {
-            cout<<"No more clients remaining, shutting down."<<endl;
-            break;
-        }
     }
     close(epollfd);
-    close(serversocketfd);
-    return 0;
+    cout<<"Au revoir"<<endl;
 }
 
 // listen(socket, int backlog); backlog=limita de clienti pt socket
@@ -55,7 +69,7 @@ void socket_listens(int& serversocket) {
         close(serversocket);
         exit(1);
     }
-    else cout<<"listen() OK, waitig for connections..."<<endl;
+    else cout<<"listen() OK, waiting for connections..."<<endl;
 }
 
 void receive_data(int &acceptsocket, string& message) {
@@ -68,7 +82,6 @@ void receive_data(int &acceptsocket, string& message) {
     else if (bytes_received==0) {
         cout<<"client disconnected"<<endl;
         close(acceptsocket);
-        client_count--;     //o implementare posibila pentru ca serverul sa se inchida odata ce ultimul client conectat se deconecteaza.
     }
     else{
         buffer[bytes_received]='\0';
@@ -108,7 +121,6 @@ void handle_client(int epollfd, int serversocket) {
         return;
     }
     cout<<"New client connected (Index: "<<clients.size()-1<<')'<<endl;  //implementare temporara
-    client_count++;
 }
 
 void handle_communication(int epollfd, int clientsocket) {
@@ -117,7 +129,6 @@ void handle_communication(int epollfd, int clientsocket) {
     if (message=="pa") {
         cout<<"One client requested to end the chat."<<endl;
         close(clientsocket);
-        client_count--;
         return;
     }
     bool ok=1;
@@ -155,4 +166,91 @@ int setup_epoll(int serversocket) {
         exit(1);
     }
     return epollfd;
+}
+
+void admin_listener() {
+    while (true) {
+        string input;
+        getline(cin,input);
+        if (input.rfind("admin access:" , 0)!=0) {
+            continue;
+        }
+        string admin_name=input.substr(13);
+        ifstream admin_file("admins.txt");
+        if (!admin_file.is_open()) {
+            cerr<<"Admin database not found."<<endl;
+            continue;
+        }
+        bool valid_admin = false;
+        string valid_name;
+        while (admin_file>>valid_name) {
+            if (admin_name == valid_name) {
+                valid_admin = true;
+                break;
+            }
+        }
+        admin_file.close();
+        if (!valid_admin) {
+            cerr<<"Admin ID unrecognised."<<endl;
+            continue;
+        }
+        cout<<"Admin ID recognised, enter the admin password: ";
+        getline(cin, input);
+        const string password = "bacau";
+        if (input == password) {
+            cout<<"Admin access granted"<<endl;
+            admin_access=true;
+            admin_commands();
+        }else {
+            cerr<<"Incorrect password."<<endl;
+        }
+    }
+}
+
+void admin_commands() {
+    pid_t server_pid = read_server_pid();
+    while (true) {
+        string input;
+        getline(cin,input);
+        if (input.rfind("logout" , 0) == 0) {
+            admin_access=false;
+            cout<<"Logout request approved. Who are you?";
+            break;
+        }
+        if (input.rfind("shutdown",  0)==0) {
+            //implement a .txt to save the current parkings status
+            kill(server_pid, SIGUSR1);
+            cout<<"Shutdown signal sent. Bye bye!"<<endl;
+            break;
+        }
+    }
+}
+
+void signal_handler(int signal) {
+    if (signal == SIGUSR1) {
+        shutdown_requested=true;
+    }
+}
+
+void save_server_pid() {
+    ofstream pid_file("server.pid");
+    if (pid_file.is_open()) {
+        pid_file<<getpid();
+        pid_file.close();
+    }else {
+        cerr<<"Failed to save server PID"<<endl;
+    }
+}
+
+pid_t read_server_pid() {
+    ifstream pid_file("server.pid");
+    pid_t pid;
+    if (pid_file.is_open()) {
+        pid_file>>pid;
+        pid_file.close();
+    }else {
+        cerr<<"Could not read server PID"<<endl;
+        exit(1);
+    }
+    return pid;
 }

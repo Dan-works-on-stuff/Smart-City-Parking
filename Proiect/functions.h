@@ -20,7 +20,8 @@
 #include <thread>
 #include <mutex>
 #include <fstream>
-
+#include <atomic>
+#include <csignal>
 using namespace std;
 
 void create_socket(int& serversocket) {
