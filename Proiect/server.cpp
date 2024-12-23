@@ -5,14 +5,14 @@ using namespace std;
 const int MAX_PARCARI = 10;
 vector<vector<bool>*> clients;  //fiecarui client i se asociaza un vector iar vectorul cel mare ce tine toate locurile de parcare este un vector de pointeri.
 atomic<bool> admin_access(false);
-bool shutdown_requested = false;
+atomic <bool> shutdown_requested = false;
 
 void create_socket(int& serversocket);
 void bind_socket(int& serversocket, int port);
 void socket_listens(int& serversocket);
 void receive_data(int &acceptsocket, string& message);
 void send_data(int &acceptsocket, const string &mesaj);
-void handle_client(int epollfd, int serversocket);
+void handle_new_FloorMaster(int epollfd, int serversocket);
 void handle_communication(int epollfd, int clientsocket);
 int setup_epoll(int serversocket);
 void server_executions(int serversocket);
@@ -53,7 +53,7 @@ void server_executions(int serversocket) {
         }
         for (int i=0; i<nfds; i++) {
             if (etaje[i].data.fd==serversocket) {
-                handle_client(epollfd, serversocket);
+                handle_new_FloorMaster(epollfd, serversocket);
             }
             else handle_communication(epollfd, etaje[i].data.fd);
         }
@@ -103,7 +103,7 @@ void send_data(int &acceptsocket, const string &mesaj) {
     else cout<<"Server: sent "<< bytes_sent << " bytes ("<<mesaj<<')'<<endl;
 }
 
-void handle_client(int epollfd, int serversocket) {
+void handle_new_FloorMaster(int epollfd, int serversocket) {
     struct epoll_event ev;
     int clientsocket=accept(serversocket, NULL, NULL);
     if (clientsocket==-1) {
