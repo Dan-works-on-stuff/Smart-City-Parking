@@ -2,27 +2,61 @@
 
 using namespace std;
 
-const int MAX_ETAJE = 100;
+const int MAX_PARCARI = 10;
 int client_count;
 vector<vector<bool>*> clients;  //fiecarui client i se asociaza un vector iar vectorul cel mare ce tine toate locurile de parcare este un vector de pointeri.
 
 void create_socket(int& serversocket);
 void bind_socket(int& serversocket, int port);
+void socket_listens(int& serversocket);
+void receive_data(int &acceptsocket, string& message);
+void send_data(int &acceptsocket, const string &mesaj);
+void handle_client(int epollfd, int serversocket);
+void handle_communication(int epollfd, int clientsocket);
+int setup_epoll(int serversocket);
+
+int main() {
+    int serversocketfd=-1;
+    create_socket(serversocketfd);
+    bind_socket(serversocketfd, 55555);
+    socket_listens(serversocketfd);
+
+    int epollfd=setup_epoll(serversocketfd);
+
+    struct epoll_event etaje[MAX_PARCARI];
+    while (true) {
+        int nfds=epoll_wait(epollfd, etaje, MAX_PARCARI, -1);
+        if (nfds==-1) {
+            if (client_count==0) {
+                break;
+            }
+            cerr<<"epoll_wait() failed: "<<strerror(errno)<<endl;
+        }
+        for (int i=0; i<nfds; i++) {
+            if (etaje[i].data.fd==serversocketfd) {
+                handle_client(epollfd, serversocketfd);
+            }
+            else handle_communication(epollfd, etaje[i].data.fd);
+        }
+        if (client_count==0) {
+            cout<<"No more clients remaining, shutting down."<<endl;
+            break;
+        }
+    }
+    close(epollfd);
+    close(serversocketfd);
+    return 0;
+}
 
 // listen(socket, int backlog); backlog=limita de clienti pt socket
-
 void socket_listens(int& serversocket) {
-    if (listen(serversocket,MAX_ETAJE)==-1) {  //am ales 10 clienti reprezentand un numar de 10 etaje teoretice posibile ale unei parcari
+    if (listen(serversocket,MAX_PARCARI)==-1) {  //am ales 10 clienti reprezentand un numar de 10 etaje teoretice posibile ale unei parcari
         cerr<<"listen():Error listening to socket "<< strerror(errno)<<endl;
         close(serversocket);
         exit(1);
     }
     else cout<<"listen() OK, waitig for connections..."<<endl;
 }
-
-//accept(socket, struct sockaddr* addr, int* addrlen)  sockaddr* addr este adresa clientului, e folositor daca vrei sa accepti informatii doar de la un client anume.
-                                                     //int* addrlen size of the address structure ^^
-//RETURNS A VALUE OF TYPE INT!! mai exact un ALT SOCKET, o DUBLURA cu acelasi PORT si IP_adress cu care comunica explicit cu clientul desemnat.
 
 void receive_data(int &acceptsocket, string& message) {
     char buffer[200];
@@ -121,38 +155,4 @@ int setup_epoll(int serversocket) {
         exit(1);
     }
     return epollfd;
-}
-
-
-int main() {
-    int serversocketfd=-1;
-    create_socket(serversocketfd);
-    bind_socket(serversocketfd, 55555);
-    socket_listens(serversocketfd);
-
-    int epollfd=setup_epoll(serversocketfd);
-
-    struct epoll_event etaje[MAX_ETAJE];
-    while (true) {
-        int nfds=epoll_wait(epollfd, etaje, MAX_ETAJE, -1);
-        if (nfds==-1) {
-            if (client_count==0) {
-                break;
-            }
-            cerr<<"epoll_wait() failed: "<<strerror(errno)<<endl;
-        }
-        for (int i=0; i<nfds; i++) {
-            if (etaje[i].data.fd==serversocketfd) {
-                handle_client(epollfd, serversocketfd);
-            }
-            else handle_communication(epollfd, etaje[i].data.fd);
-        }
-        if (client_count==0) {
-            cout<<"No more clients remaining, shutting down."<<endl;
-            break;
-        }
-    }
-    close(epollfd);
-    close(serversocketfd);
-    return 0;
 }

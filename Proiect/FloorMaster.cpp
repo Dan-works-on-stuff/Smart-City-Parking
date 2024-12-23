@@ -1,3 +1,5 @@
+#include <bits/fs_fwd.h>
+
 #include "functions.h"
 
 using namespace std;
@@ -18,7 +20,7 @@ void handle_client(int epollfd, int FloorMasterSocket);
 void handle_communication(int epollfd, int sensorsocket);
 void listener_thread(int FloorMasterSocket);
 void sender_thread(int FloorMasterSocket);
-void update_parking_spots(const string &message);
+bool update_parking_spots(const string &message);
 
 // Main function
 int main() {
@@ -119,24 +121,32 @@ void send_data(int &acceptsocket, const string &mesaj) {
 }
 
 // Function to process parking spot updates
-void update_parking_spots(const string &message) {
+bool update_parking_spots(const string &message) {
     lock_guard<mutex> lock(mtx);
     try {
         size_t pos = message.find(':');
         if (pos == string::npos) throw invalid_argument("Invalid message format");
 
         int spot = stoi(message.substr(0, pos));
-        bool status = (message.substr(pos + 1) == "1");
+
 
         if (spot >= 0 && spot < sensors.size()) {
-            sensors[spot] = status;
-            cout << "Spot " << spot << " is now " << (status ? "occupied" : "free") << "." << endl;
+            if (message.substr(pos + 1)=="1" || message.substr(pos+1)=="0") {
+                bool status = stoi(message.substr(pos + 1));
+                sensors[spot] = status;
+                cout << "Spot " << spot << " is now " << (status ? "occupied" : "free") << "." << endl;
+                return 0;
+            }
+            else {
+                cerr<<"Invalid status entered, the only possible 2 statuses are 1 for occupied and 0 for unnocupied"<<endl;
+            }
         } else {
             cerr << "Invalid spot number." << endl;
         }
     } catch (const exception &e) {
         cerr << "Error processing message: " << e.what() << endl;
     }
+    return 1;
 }
 
 // Function to handle communication with a sensor
@@ -148,8 +158,11 @@ void handle_communication(int epollfd, int sensorsocket) {
         return; // No message received or sensor disconnected
     }
 
-    update_parking_spots(message);
-    send_data(sensorsocket, "Parking spot updated.");
+    bool status=update_parking_spots(message);
+    if (status==0)
+        send_data(sensorsocket, "Parking spot updated.");
+    else
+        send_data(sensorsocket, "Error marking the parking spot");
 }
 
 // Listener thread to handle incoming connections and messages
