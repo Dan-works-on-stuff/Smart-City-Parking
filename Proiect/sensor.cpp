@@ -1,6 +1,5 @@
 #include "functions.h"
 
-
 using namespace std;
 
 void create_socket(int& serversocket);

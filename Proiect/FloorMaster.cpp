@@ -12,14 +12,15 @@ const int update_interval = 10; // Update interval in seconds
 // Function declarations
 void create_socket(int& FloorMasterSocket);
 void bind_socket(int& FloorMasterSocket, int port);
+void connect_socks(int &clientsocket, struct sockaddr_in &clientService);
 void socket_listens(int& FloorMasterSocket);
 void receive_data(int &acceptsocket, string& message);
 void send_data(int &acceptsocket, const string &mesaj);
 int setup_epoll(int FloorMasterSocket);
-void handle_client(int epollfd, int FloorMasterSocket);
+void handle_sensor(int epollfd, int FloorMasterSocket);
 void handle_communication(int epollfd, int sensorsocket);
 void listener_thread(int FloorMasterSocket);
-void sender_thread(int FloorMasterSocket);
+void sender_thread(int serversocket);
 bool update_parking_spots(const string &message);
 
 // Main function
@@ -29,11 +30,29 @@ int main() {
     bind_socket(FloorMasterSocketfd, 55555);
     socket_listens(FloorMasterSocketfd);
 
-    thread listener(listener_thread, FloorMasterSocketfd);
-    thread sender(sender_thread, FloorMasterSocketfd);
-    listener.join(); // Wait for the listener thread to complete
+    int server_socket=-1;
+    create_socket(server_socket);
+    struct sockaddr_in server_service;
+    connect_socks(server_socket, server_service);
 
-    return 0; // Proper cleanup and exit
+    thread listener(listener_thread, FloorMasterSocketfd);
+    thread sender(sender_thread, server_socket);
+    listener.join();
+    sender.join();
+    return 0;
+}
+
+void connect_socks(int &clientsocket, struct sockaddr_in &clientService) {
+    clientService.sin_family=AF_INET;
+    inet_pton(AF_INET, "127.0.0.1", &clientService.sin_addr);  //informatiile pentru a conecta socketurile intre ele
+    clientService.sin_port=htons(55554);      //htons e o functie pentru a pune bitii in ordinea corecta pe care o poate intelege serverul
+    if (connect(clientsocket, (struct sockaddr *)&clientService, sizeof(clientService))==-1) {
+        cerr<<"error with the connection(): "<< strerror(errno)<<endl;
+        close(clientsocket);
+        exit(1);
+    }
+    cout<<"Client: connect() is OK."<<endl;
+    cout<<"Client: Can start sending and receiving data..."<<endl;
 }
 
 // Function to set the socket to listen
@@ -190,7 +209,7 @@ void listener_thread(int FloorMasterSocket) {
     close(FloorMasterSocket);
 }
 
-void sender_thread(int FloorMasterSocket) {
+void sender_thread(int serversocket) {
     while (true) {
         this_thread::sleep_for(chrono::seconds(update_interval));
         mtx.lock();
@@ -198,10 +217,27 @@ void sender_thread(int FloorMasterSocket) {
             cerr<<"Erroare: Nu se poate accesa fisierul txt dorit. "<< strerror(errno)<<endl;
             continue;
         }
-        for (int i=0; i<sensors.size(); i++)
-            g<<sensors[i]<<' ';
+        for (int i=0; i<sensors.size(); i++) {
+            g<<sensors[i];
+        }
         g<<endl;
+        string message;
+        for (int i=0; i<sensors.size(); i++) {
+            message += sensors[i] ? '1' : '0';
+        }
+        send_data(serversocket, message);
         mtx.unlock();
         //de implementat trimiterea catre server (sa ma uit cum se intampla in sensor)
+
     }
+}
+
+void send_data(int &serversocket, string mesaj) {
+        const char* buffer = mesaj.c_str();
+        size_t buffer_len = mesaj.length();
+        int bytes_sent= send(serversocket, buffer, buffer_len, 0);
+        if (bytes_sent ==-1) {
+            cerr<<"send() failed: "<< strerror(errno)<<endl;
+        }
+        else cout<<"sensor: sent "<< bytes_sent << " bytes"<<endl;
 }
