@@ -22,6 +22,7 @@
 #include <fstream>
 #include <atomic>
 #include <csignal>
+#include <algorithm>
 using namespace std;
 
 void create_socket(int& serversocket) {
@@ -49,6 +50,13 @@ void bind_socket(int& serversocket, int port) {
         exit(1);
     }
     else cout<<"bind() OK"<<endl;
+}
+
+void set_socket_options(int &socket_fd) {
+    int opt=1;
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))<0) {
+        cerr<<"setsockopt() failed: "<<strerror(errno)<<endl;
+    }
 }
 
 #endif //FUNCTIONS_H

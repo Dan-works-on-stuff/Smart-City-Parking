@@ -22,6 +22,8 @@ void handle_communication(int epollfd, int sensorsocket);
 void listener_thread(int FloorMasterSocket);
 void sender_thread(int serversocket);
 bool update_parking_spots(const string &message);
+void connect_new_port(int &clientsocket, int new_port);
+
 
 // Main function
 int main() {
@@ -32,6 +34,7 @@ int main() {
 
     int server_socket=-1;
     create_socket(server_socket);
+    set_socket_options(server_socket);
     struct sockaddr_in server_service;
     connect_socks(server_socket, server_service);
 
@@ -43,6 +46,7 @@ int main() {
 }
 
 void connect_socks(int &clientsocket, struct sockaddr_in &clientService) {
+    memset(&clientService, 0, sizeof(clientService));
     clientService.sin_family=AF_INET;
     inet_pton(AF_INET, "127.0.0.1", &clientService.sin_addr);  //informatiile pentru a conecta socketurile intre ele
     clientService.sin_port=htons(55554);      //htons e o functie pentru a pune bitii in ordinea corecta pe care o poate intelege serverul
@@ -51,8 +55,9 @@ void connect_socks(int &clientsocket, struct sockaddr_in &clientService) {
         close(clientsocket);
         exit(1);
     }
-    cout<<"Client: connect() is OK."<<endl;
-    cout<<"Client: Can start sending and receiving data..."<<endl;
+    cout<<"Connected to the server. Looking for a different port..."<<endl;     //s-a conectat la un port de welcome, temporar, acum este timpul ca el sa primeasca un alt port permanent
+    int new_port;
+    connect_new_port(clientsocket, new_port);
 }
 
 // Function to set the socket to listen
@@ -227,8 +232,6 @@ void sender_thread(int serversocket) {
         }
         send_data(serversocket, message);
         mtx.unlock();
-        //de implementat trimiterea catre server (sa ma uit cum se intampla in sensor)
-
     }
 }
 
@@ -240,4 +243,36 @@ void send_data(int &serversocket, string mesaj) {
             cerr<<"send() failed: "<< strerror(errno)<<endl;
         }
         else cout<<"sensor: sent "<< bytes_sent << " bytes"<<endl;
+}
+
+void connect_new_port(int &clientsocket, int new_port) {
+    char port_buffer[10] = {0}; // Buffer to store the received port string
+    if (recv(clientsocket, port_buffer, sizeof(port_buffer) - 1, 0) <= 0) {
+        cerr << "Error receiving new port: " << strerror(errno) << endl;
+        close(clientsocket);
+        exit(1);
+    }
+
+    try {
+        new_port = stoi(port_buffer); // Convert string to integer
+    } catch (const exception &e) {
+        cerr << "Invalid port received: " << port_buffer << endl;
+        close(clientsocket);
+        exit(1);
+    }
+    cout << "Received new port: " << new_port << endl;
+
+    close(clientsocket);
+    struct sockaddr_in server_service = {};
+    create_socket(clientsocket);
+    set_socket_options(clientsocket);
+
+    server_service.sin_family=AF_INET;
+    inet_pton(AF_INET, "127.0.0.1", &server_service.sin_addr);
+    server_service.sin_port=htons(new_port);
+    if (connect(clientsocket,(struct sockaddr*)&server_service, sizeof(server_service))==-1) {
+        cerr<<"Error connecting to new port: "<<strerror(errno)<<endl;
+        exit(1);
+    }
+    cout<<"FloorMaster connected to new port: "<<new_port<<endl;
 }
