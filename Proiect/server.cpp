@@ -137,6 +137,8 @@ void handle_new_FloorMaster(int epollfd, int serversocket) {
         return;
     }
     cout<<"New FloorMaster connected (Index: "<<index<<" / Letter: "<<letter<<')'<<endl;
+    string level(1, letter);
+    send_data(clientsocket, level);
 }
 
 void handle_communication(int epollfd, int clientsocket) {
@@ -147,14 +149,14 @@ void handle_communication(int epollfd, int clientsocket) {
         close(clientsocket);
         return;
     }
-    if (message.length()>100 || message.find_first_not_of("01")!=string::npos) {
+    if (message.find_first_not_of("01", 3)!=string::npos) {
         cerr<<"Invalid data received: "<< message<<endl;
         string response="Error: Invalid parking data format";
         send_data(clientsocket, response);
         return;
     }
     update_parking_spots(clientsocket,  message);
-    send_data(clientsocket, message);
+    send_data(clientsocket, "Received data successfully.");
 }
 
 void update_parking_spots(int clientsocket, const string& data) {
@@ -169,7 +171,7 @@ void update_parking_spots(int clientsocket, const string& data) {
         cerr<<"Error: FloorMaster not found for clientsocket "<<clientsocket<<endl;
         return;
     }
-    if (data.size()!=FM[floorIndex].parking_spots.size()) {
+    if (data.size()!=FM[floorIndex].parking_spots.size()+3) {
         cerr<<"Error: Data size mismatch for FloorMaster "<<floorIndex<<endl;
         return;
     }

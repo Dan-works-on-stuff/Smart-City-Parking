@@ -4,6 +4,7 @@
 
 using namespace std;
 ofstream g("parking.txt");
+string level;
 const int MAX_PARCARI = 100;  // Maximum parking spots
 vector<bool> sensors(MAX_PARCARI, false); // Sensor status
 mutex mtx; // Mutex for shared resources
@@ -47,12 +48,14 @@ void connect_socks(int &clientsocket, struct sockaddr_in &clientService) {
     inet_pton(AF_INET, "127.0.0.1", &clientService.sin_addr);  //informatiile pentru a conecta socketurile intre ele
     clientService.sin_port=htons(55554);      //htons e o functie pentru a pune bitii in ordinea corecta pe care o poate intelege serverul
     if (connect(clientsocket, (struct sockaddr *)&clientService, sizeof(clientService))==-1) {
-        cerr<<"error with the connection(): "<< strerror(errno)<<endl;
+        cerr<<"Error with the connection(): "<< strerror(errno)<<endl;
         close(clientsocket);
         exit(1);
     }
-    cout<<"Client: connect() is OK."<<endl;
-    cout<<"Client: Can start sending and receiving data..."<<endl;
+    cout<<"FloorMaster: connect() is OK."<<endl;
+    cout<<"FloorMaster: Can start sending and receiving data..."<<endl;
+    receive_data(clientsocket, level);
+
 }
 
 // Function to set the socket to listen
@@ -225,6 +228,7 @@ void sender_thread(int serversocket) {
         for (int i=0; i<sensors.size(); i++) {
             message += sensors[i] ? '1' : '0';
         }
+        message = level + ": " + message;
         send_data(serversocket, message);
         mtx.unlock();
         //de implementat trimiterea catre server (sa ma uit cum se intampla in sensor)
