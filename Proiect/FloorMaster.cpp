@@ -4,7 +4,8 @@
 
 using namespace std;
 ofstream g("parking.txt");
-string level;
+string level_letter;
+int level_number;
 const int MAX_PARCARI = 100;  // Maximum parking spots
 vector<bool> sensors(MAX_PARCARI, false); // Sensor status
 mutex mtx; // Mutex for shared resources
@@ -23,11 +24,13 @@ void handle_communication(int epollfd, int sensorsocket);
 void listener_thread(int FloorMasterSocket);
 void sender_thread(int serversocket);
 bool update_parking_spots(const string &message);
+void stringToInt(const std::string& str);
 
-// Main function
+
 int main() {
     int FloorMasterSocketfd = -1;
     create_socket(FloorMasterSocketfd);
+
     bind_socket(FloorMasterSocketfd, 55555);
     socket_listens(FloorMasterSocketfd);
 
@@ -54,7 +57,7 @@ void connect_socks(int &clientsocket, struct sockaddr_in &clientService) {
     }
     cout<<"FloorMaster: connect() is OK."<<endl;
     cout<<"FloorMaster: Can start sending and receiving data..."<<endl;
-    receive_data(clientsocket, level);
+    receive_data(clientsocket, level_letter);
 
 }
 
@@ -228,7 +231,7 @@ void sender_thread(int serversocket) {
         for (int i=0; i<sensors.size(); i++) {
             message += sensors[i] ? '1' : '0';
         }
-        message = level + ": " + message;
+        message = level_letter + ": " + message;
         send_data(serversocket, message);
         mtx.unlock();
         //de implementat trimiterea catre server (sa ma uit cum se intampla in sensor)
@@ -244,4 +247,11 @@ void send_data(int &serversocket, string mesaj) {
             cerr<<"send() failed: "<< strerror(errno)<<endl;
         }
         else cout<<"sensor: sent "<< bytes_sent << " bytes"<<endl;
+}
+
+
+void stringToInt(const string& str) {
+    if (str.length() == 1 && str[0] >= 'A' && str[0] <= 'Z') {
+        level_number = level_number * 26 + (str[0] - 'A');
+    }
 }
