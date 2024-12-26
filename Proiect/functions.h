@@ -33,6 +33,12 @@ void create_socket(int& serversocket) {
     }
     else cout<<"socket() is ok"<<endl;
     //close(serversocket);
+    int opt = 1;
+    if (setsockopt(serversocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
+        cerr << "setsockopt() failed: " << strerror(errno) << endl;
+        close(serversocket);
+        exit(1);
+    }
 }
 
 void bind_socket(int& serversocket, int port) {
@@ -52,11 +58,5 @@ void bind_socket(int& serversocket, int port) {
     else cout<<"bind() OK"<<endl;
 }
 
-void set_socket_options(int &socket_fd) {
-    int opt=1;
-    if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))<0) {
-        cerr<<"setsockopt() failed: "<<strerror(errno)<<endl;
-    }
-}
 
 #endif //FUNCTIONS_H

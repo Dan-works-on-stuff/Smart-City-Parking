@@ -28,16 +28,18 @@ void stringToInt(const std::string& str);
 
 
 int main() {
-    int FloorMasterSocketfd = -1;
-    create_socket(FloorMasterSocketfd);
-
-    bind_socket(FloorMasterSocketfd, 55555);
-    socket_listens(FloorMasterSocketfd);
-
     int server_socket=-1;
     create_socket(server_socket);
     struct sockaddr_in server_service;
     connect_socks(server_socket, server_service);
+
+    stringToInt(level_letter);
+
+    int FloorMasterSocketfd = -1;
+    int port_for_sensors= 55556+level_number;
+    create_socket(FloorMasterSocketfd);
+    bind_socket(FloorMasterSocketfd, port_for_sensors);
+    socket_listens(FloorMasterSocketfd);
 
     thread listener(listener_thread, FloorMasterSocketfd);
     thread sender(sender_thread, server_socket);
@@ -151,10 +153,7 @@ bool update_parking_spots(const string &message) {
     try {
         size_t pos = message.find(':');
         if (pos == string::npos) throw invalid_argument("Invalid message format");
-
         int spot = stoi(message.substr(0, pos));
-
-
         if (spot >= 0 && spot < sensors.size()) {
             if (message.substr(pos + 1)=="1" || message.substr(pos+1)=="0") {
                 bool status = stoi(message.substr(pos + 1));
@@ -223,10 +222,10 @@ void sender_thread(int serversocket) {
             cerr<<"Erroare: Nu se poate accesa fisierul txt dorit. "<< strerror(errno)<<endl;
             continue;
         }
-        for (int i=0; i<sensors.size(); i++) {
-            g<<sensors[i];
-        }
-        g<<endl;
+        // for (int i=0; i<sensors.size(); i++) {
+        //     g<<sensors[i];
+        // }
+        // g<<endl<<endl;
         string message;
         for (int i=0; i<sensors.size(); i++) {
             message += sensors[i] ? '1' : '0';

@@ -11,6 +11,7 @@ struct FloorMaster {
     char letter;
     vector<bool> parking_spots;
     int FMsock;
+    int socket_for_sensors;
 };
 vector<FloorMaster> FM;
 //fiecarui FloorMaster i se asociaza o structura de tipul FloorMaster ce contine chestiile alea
@@ -126,7 +127,7 @@ void handle_new_FloorMaster(int epollfd, int serversocket) {
         return;
     }
     char letter= 'A' + index;
-    FloorMaster newFM ={index, letter, vector<bool>(100, false),clientsocket};
+    FloorMaster newFM ={index, letter, vector<bool>(100, false),clientsocket, 55556+index};
     FM.push_back(newFM);
 
     ev.events=EPOLLIN;
@@ -160,25 +161,16 @@ void handle_communication(int epollfd, int clientsocket) {
 }
 
 void update_parking_spots(int clientsocket, const string& data) {
-    int floorIndex=-1;
-    for (int i=0; i<FM.size(); i++) {
-        if (FM[i].FMsock==clientsocket) {
-            floorIndex=i;
-            break;
+    for (auto& fm : FM) {
+        if (fm.FMsock == clientsocket) {
+            for (size_t i = 0; i < fm.parking_spots.size(); ++i) {
+                fm.parking_spots[i] = (data[i] == '1');
+            }
+            cout << "Parking spots updated for FloorMaster " << fm.index << " (" << fm.letter << ")" << endl;
+            return;
         }
-    }
-    if (floorIndex==-1) {
-        cerr<<"Error: FloorMaster not found for clientsocket "<<clientsocket<<endl;
-        return;
-    }
-    if (data.size()!=FM[floorIndex].parking_spots.size()+3) {
-        cerr<<"Error: Data size mismatch for FloorMaster "<<floorIndex<<endl;
-        return;
-    }
-    for (int i=0;i<data.size(); i++) {
-        FM[floorIndex].parking_spots[i]=(data[i]=='1');
-    }
-    //trebuie sa configurez ceva aici astfel incat sa am un output intr-un fisier cu toate etajele.
+    }//trebuie sa configurez ceva aici astfel incat sa am un output intr-un fisier cu toate etajele.
+    cerr << "Error: FloorMaster not found for clientsocket " << clientsocket << endl;
 }
 
 int setup_epoll(int serversocket) {
