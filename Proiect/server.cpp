@@ -11,10 +11,8 @@ struct FloorMaster {
     char letter;
     vector<bool> parking_spots;
     int FMsock;
-    int port;
 };
 vector<FloorMaster> FM;
-int next_port = 50001;
 //fiecarui FloorMaster i se asociaza o structura de tipul FloorMaster ce contine chestiile alea
 
 void create_socket(int& serversocket);
@@ -38,7 +36,6 @@ int main() {
 
     int serversocketfd=-1;
     create_socket(serversocketfd);
-    set_socket_options(serversocketfd);
     bind_socket(serversocketfd, 55554);
     socket_listens(serversocketfd);
 
@@ -55,14 +52,13 @@ int main() {
 
 void server_executions(int serversocket) {
     int epollfd=setup_epoll(serversocket);
-    struct epoll_event etaje[MAX_PARCARI];
 
+    struct epoll_event etaje[MAX_PARCARI];
     while (!shutdown_requested) {
         int nfds=epoll_wait(epollfd, etaje, MAX_PARCARI, -1);
         if (nfds==-1) {
             if (errno == EINTR) break;
             cerr<<"epoll_wait() failed: "<<strerror(errno)<<endl;
-            continue;
         }
         for (int i=0; i<nfds; i++) {
             if (etaje[i].data.fd==serversocket) {
@@ -118,36 +114,36 @@ void send_data(int &acceptsocket, const string &mesaj) {
 
 void handle_new_FloorMaster(int epollfd, int serversocket) {
     struct epoll_event ev;
-    int clientsocket=accept(serversocket, nullptr, nullptr);
+    int clientsocket=accept(serversocket, NULL, NULL);
     if (clientsocket==-1) {
         cerr<<"accept() failed: "<<strerror(errno)<<endl;
         return;
     }
     int index=FM.size();
-    if (index>=MAX_PARCARI) { //nr maxim de etaje, nu bag mana in foc ca ar merge codul bine nici macar cu 10 etaje, is 10 000 de locuri de parcare totusi
+    if (index>=10) { //nr maxim de etaje, nu bag mana in foc ca ar merge codul bine nici macar cu 10 etaje, is 10 000 de locuri de parcare totusi
         cerr<<"Max FloorMasters reached!"<<endl;
         close(clientsocket);
         return;
     }
-    int assigned_port = next_port++;
-    int newsocket;
-    create_socket(newsocket);
-    set_socket_options(newsocket);
-    bind_socket(newsocket, assigned_port);
-    socket_listens(newsocket);
-    char letter = 'A' + index;
-    FloorMaster newFM = {index, letter, vector<bool>(100, false), newsocket, assigned_port};
+    char letter= 'A' + index;
+    FloorMaster newFM ={index, letter, vector<bool>(100, false),clientsocket};
     FM.push_back(newFM);
-    send_data(clientsocket, to_string(assigned_port));  //modify this if necessary
-    cout<<"New FloorMaster connected (Index: "<<index<<" / Letter: "<<letter<<", Port: "<<assigned_port<<')'<<endl;
+
+    ev.events=EPOLLIN;
+    ev.data.fd=clientsocket;
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, clientsocket, &ev)==-1) {
+        cerr<<"epoll_ctl() failed"<<strerror(errno)<<endl;
+        close(clientsocket);
+        return;
+    }
+    cout<<"New FloorMaster connected (Index: "<<index<<" / Letter: "<<letter<<')'<<endl;
 }
 
 void handle_communication(int epollfd, int clientsocket) {
     string message;
     receive_data(clientsocket, message);
     if (message=="pa") {
-        cout<<"One FloorMaster disconnected."<<endl;
-        epoll_ctl(epollfd, EPOLL_CTL_DEL, clientsocket, nullptr);
+        cout<<"One FloorMaster requested to end the chat."<<endl;
         close(clientsocket);
         return;
     }
