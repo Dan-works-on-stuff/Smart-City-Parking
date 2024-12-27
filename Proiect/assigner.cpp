@@ -10,7 +10,7 @@ using namespace std;
 
 volatile sig_atomic_t shutdown_requested = 0;
 mutex floor_mutex;
-int available_floors = 0;
+int available_floors = -1;
 
 void signal_handler(int signum) {
     shutdown_requested = 1;
@@ -90,17 +90,18 @@ void send_data(int &sensorsocket, const string &mesaj) {
     }
 }
 
-void handle_client_request(int client_socket) {
+void handle_client_request(int client_socket, int epoll_fd) {
     char buffer[BUFFER_SIZE];
     int bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
 
     if (bytes_received <= 0) {
         if (bytes_received == 0) {
-            cout << "Client disconnected." << endl;
+            cout << "Sensor disconnected." << endl;
         } else {
             cerr << "recv() failed: " << strerror(errno) << endl;
         }
         close(client_socket);
+        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_socket, nullptr); // Remove from epoll
         return;
     }
 
@@ -111,22 +112,28 @@ void handle_client_request(int client_socket) {
         cout << "Shutdown signal received." << endl;
         shutdown_requested = 1;
         close(client_socket);
+        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_socket, nullptr); // Remove from epoll
         return;
     }
 
-    int requested_floor = stoi(client_message);
-
-    lock_guard<mutex> lock(floor_mutex);
-    if (requested_floor < 0 || requested_floor >= available_floors) {
-        send_data(client_socket, "Invalid floor. Try again.");
-    } else {
+    try {
+        int requested_floor = stoi(client_message);
+        {
+            lock_guard<mutex> lock(floor_mutex);
+            if (requested_floor > available_floors) {
+                send_data(client_socket, "Invalid floor. Try again.");
+                return;
+            }
+        }
         int port = 55556 + requested_floor;
         send_data(client_socket, to_string(port));
+        close(client_socket);
+        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_socket, nullptr); // Remove from epoll
+    } catch (const exception &e) {
+        send_data(client_socket, "Invalid input. Try again.");
+        return;
     }
-
-    close(client_socket);
 }
-
 void handle_new_sensor(int server_socket, int epoll_fd) {
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
@@ -152,22 +159,25 @@ void handle_new_sensor(int server_socket, int epoll_fd) {
 void sensor_processing_thread(int server_socket) {
     int epoll_fd = setup_epoll(server_socket);
     struct epoll_event events[MAX_EVENTS];
+    const int EPOLL_TIMEOUT = 5000; // Milliseconds
 
     while (!shutdown_requested) {
-        int nfds = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
+        int nfds = epoll_wait(epoll_fd, events, MAX_EVENTS, EPOLL_TIMEOUT);
         if (nfds == -1) {
             if (errno == EINTR) {
-                break; // Interrupted by signal
+                break;
             }
             cerr << "epoll_wait() failed: " << strerror(errno) << endl;
             break;
         }
-
+        if (nfds == 0) {
+            continue;
+        }
         for (int i = 0; i < nfds; ++i) {
             if (events[i].data.fd == server_socket) {
                 handle_new_sensor(server_socket, epoll_fd);
             } else {
-                handle_client_request(events[i].data.fd);
+                handle_client_request(events[i].data.fd, epoll_fd);
             }
         }
     }

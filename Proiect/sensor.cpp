@@ -99,11 +99,24 @@ int main() {
     create_socket(sensor_socket);
     struct sockaddr_in sensor_service;
     connect_to_assigner(sensor_socket, sensor_service);
-    int level=-1;
-    cin>>level;
-    send_data(sensor_socket, to_string(level));
+    string level;
     string message;
-    receive_data(sensor_socket, message);
+    do{
+        cin >> level;
+        try {
+            int levelNum = stoi(level);
+            if (levelNum >= 0 && levelNum <= 10) {
+                send_data(sensor_socket, level);
+                receive_data(sensor_socket, message);
+            } else {
+                cout << "Invalid input. Please enter a number between 0 and 10." << endl;
+            }
+        } catch (const std::invalid_argument& e) {
+            cout << "Invalid input. Please enter a valid number." << endl;
+            cin.clear(); // Clear error flags
+            cin.ignore(numeric_limits<streamsize>::max(), '\n'); // Discard invalid input
+        }
+    }while (message.size()>5 || message.size()==0);
     close(sensor_socket);
     create_socket(sensor_socket);
     connect_to_FloorMaster(sensor_socket, sensor_service, stringToInt(message));
