@@ -19,8 +19,6 @@ struct FloorMaster {
 vector<FloorMaster> FM;
 //fiecarui FloorMaster i se asociaza o structura de tipul FloorMaster ce contine chestiile alea
 
-
-
 void create_socket(int& serversocket);
 void bind_socket(int& serversocket, int port);
 void socket_listens(int& serversocket);
