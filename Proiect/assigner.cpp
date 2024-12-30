@@ -98,7 +98,7 @@ void process_client_request(int client_socket, int epoll_fd) {
     receive_data(client_socket, message);
 
     if (message.empty() || shutdown_requested) {
-        return; // Client disconnected or shutdown signal handled
+        return;
     }
 
     if (message == SHUTDOWN_SIGNAL) {

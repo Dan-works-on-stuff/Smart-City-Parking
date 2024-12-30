@@ -172,7 +172,7 @@ void handle_communication(int epollfd, int clientsocket) {
 void update_parking_spots(int clientsocket, const string& data) {
     for (auto& fm : FM) {
         if (fm.FMsock == clientsocket) {
-            for (size_t i = 0; i < fm.parking_spots.size(); ++i) {
+            for (size_t i = 0; i < fm.parking_spots.size(); i++) {
                 fm.parking_spots[i] = (data[i] == '1');
             }
             cout << "Parking spots updated for FloorMaster " << fm.index << " (" << fm.letter << ")" << endl;
