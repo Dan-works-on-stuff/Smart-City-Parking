@@ -1,6 +1,5 @@
 #include "functions.h"
 
-
 using namespace std;
 #define FLOORMASTER_PORT 55553
 #define FLOORMASTER_SERVERS 55556
