@@ -26,11 +26,11 @@ void bind_socket(int& serversocket, int port);
 void socket_listens(int& serversocket);
 void receive_data(int &acceptsocket, string& message);
 void send_data(int &acceptsocket, const string &mesaj);
-void handle_new_FloorMaster(int epollfd, int serversocket);
+void handle_new_FloorMaster(int epollfd, int serversocket, int assignersocket);
 void handle_communication(int epollfd, int clientsocket);
 void update_parking_spots(int clientsocket, const string& data);
 int setup_epoll(int serversocket);
-void server_executions(int serversocket);
+void server_executions(int serversocket, int assignersocket);
 void admin_listener();
 void admin_commands();
 void signal_handler(int signal);
@@ -42,16 +42,18 @@ int main() {
     int assignersocketfd=-1;
     create_socket(assignersocketfd);
     bind_socket(assignersocketfd, ASSIGNER_PORT);
+    cout<<"Listen state on "<<ASSIGNER_PORT<<": ";
     socket_listens(assignersocketfd);
 
     int serversocketfd=-1;
     create_socket(serversocketfd);
     bind_socket(serversocketfd, FLOORMASTER_PORT);
+    cout<<"Listen state on "<<FLOORMASTER_PORT<<": ";
     socket_listens(serversocketfd);
 
     save_server_pid();
 
-    thread server_thread(server_executions, serversocketfd);
+    thread server_thread(server_executions, serversocketfd, assignersocketfd);
     thread admin_thread(admin_listener);
     server_thread.join();
     admin_thread.join();
@@ -60,7 +62,7 @@ int main() {
     return 0;
 }
 
-void server_executions(int serversocket) {
+void server_executions(int serversocket, int assignersocket) {
     int epollfd=setup_epoll(serversocket);
 
     struct epoll_event etaje[MAX_PARCARI];
@@ -72,7 +74,7 @@ void server_executions(int serversocket) {
         }
         for (int i=0; i<nfds; i++) {
             if (etaje[i].data.fd==serversocket) {
-                handle_new_FloorMaster(epollfd, serversocket);
+                handle_new_FloorMaster(epollfd, serversocket, assignersocket);
             }
             else handle_communication(epollfd, etaje[i].data.fd);
         }
@@ -122,7 +124,7 @@ void send_data(int &acceptsocket, const string &mesaj) {
     else cout<<"Server: sent "<< bytes_sent << " bytes ("<<mesaj<<')'<<endl;
 }
 
-void handle_new_FloorMaster(int epollfd, int serversocket) {
+void handle_new_FloorMaster(int epollfd, int serversocket, int assignersocket) {
     struct epoll_event ev;
     int clientsocket=accept(serversocket, NULL, NULL);
     if (clientsocket==-1) {
@@ -149,6 +151,7 @@ void handle_new_FloorMaster(int epollfd, int serversocket) {
     cout<<"New FloorMaster connected (Index: "<<index<<" / Letter: "<<letter<<')'<<endl;
     string level(1, letter);
     send_data(clientsocket, level);
+    send_data(assignersocket, to_string(index));
 }
 
 void handle_communication(int epollfd, int clientsocket) {

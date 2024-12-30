@@ -1,7 +1,6 @@
 #include "functions.h"
 
 #define MAX_EVENTS 10000
-#define BUFFER_SIZE 5
 #define ASSIGNER_PORT 55555
 #define SERVER_PORT 55554
 #define SHUTDOWN_SIGNAL "shutdown"
@@ -16,44 +15,76 @@ void signal_handler(int signum) {
     shutdown_requested = 1;
 }
 
-void create_server_socket(int &server_socket, int port) {
-    create_socket(server_socket);
-
-    struct sockaddr_in server_addr;
-    server_addr.sin_family = AF_INET;
-
-    if (inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr) <= 0) {
-        cerr << "inet_pton() failed: " << strerror(errno) << endl;
-        close(server_socket);
+void receive_data(int &acceptsocket, string& message) {
+    char buffer[200];
+    int bytes_received = recv(acceptsocket, buffer, sizeof(buffer), 0);
+    if (bytes_received<0) {
+        cerr<<"Error with the connection(): "<< strerror(errno)<<endl;
         exit(1);
     }
-
-    server_addr.sin_port = htons(port);
-
-    if (connect(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
-        cerr << "connect() failed: " << strerror(errno) << endl;
-        close(server_socket);
-        exit(1);
+    else if (bytes_received==0) {
+        cout<<"client disconnected"<<endl;
+        close(acceptsocket);
     }
-
-    cout << "Successfully connected to socket at " << port << ":" << port << endl;
+    else{
+        buffer[bytes_received]='\0';
+        message = buffer;
+        if (message=="pa") {
+            return;
+        }
+        cout<<"received data: "<<message<<endl;
+    }
 }
 
-int setup_epoll(int server_socket) {
+void send_data(int &acceptsocket, const string &mesaj) {
+    const char* buffer = mesaj.c_str();
+    size_t buffer_len = mesaj.length();
+    int bytes_sent= send(acceptsocket, buffer, buffer_len, 0);
+    if (bytes_sent ==-1) {
+        cerr<<"send() failed: "<< strerror(errno)<<endl;
+    }
+    else cout<<"Server: sent "<< bytes_sent << " bytes ("<<mesaj<<')'<<endl;
+}
+
+// Create a socket and connect to the server
+void create_and_connect_socket(int &socket_fd, int port) {
+    create_socket(socket_fd);
+
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+
+    if (inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr) <= 0) {
+        cerr << "inet_pton() failed: " << strerror(errno) << endl;
+        close(socket_fd);
+        exit(1);
+    }
+
+    if (connect(socket_fd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
+        cerr << "connect() failed: " << strerror(errno) << endl;
+        close(socket_fd);
+        exit(1);
+    }
+
+    cout << "Successfully connected to socket on port " << port << endl;
+}
+
+// EPOLL setup for non-blocking I/O
+int setup_epoll(int socket_fd) {
     int epoll_fd = epoll_create1(0);
     if (epoll_fd == -1) {
         cerr << "epoll_create1() failed: " << strerror(errno) << endl;
-        close(server_socket);
+        close(socket_fd);
         exit(1);
     }
 
     struct epoll_event ev;
     ev.events = EPOLLIN;
-    ev.data.fd = server_socket;
+    ev.data.fd = socket_fd;
 
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_socket, &ev) == -1) {
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, socket_fd, &ev) == -1) {
         cerr << "epoll_ctl() failed: " << strerror(errno) << endl;
-        close(server_socket);
+        close(socket_fd);
         close(epoll_fd);
         exit(1);
     }
@@ -61,44 +92,20 @@ int setup_epoll(int server_socket) {
     return epoll_fd;
 }
 
-void send_data(int &sensorsocket, const string &mesaj) {
-    const char* buffer = mesaj.c_str();
-    size_t buffer_len = mesaj.length();
-    int bytes_sent = send(sensorsocket, buffer, buffer_len, 0);
-    if (bytes_sent == -1) {
-        cerr << "send() failed: " << strerror(errno) << endl;
-    } else {
-        cout << "Assigner: sent " << bytes_sent << " bytes" << endl;
-    }
-}
-
-void receive_data(int &acceptsocket, string& message) {
-    char buffer[200];
-    int bytes_received = recv(acceptsocket, buffer, sizeof(buffer), 0);
-    if (bytes_received <= 0) {
-        if (bytes_received < 0) {
-            cerr << "recv() failed: " << strerror(errno) << endl;
-        } else {
-            cout << "sensor disconnected." << endl;
-        }
-        close(acceptsocket);
-        return;
-    }
-
-    buffer[bytes_received] = '\0';
-    message = buffer;
-    cout << "Received: " << message << endl;
-}
-
-void handle_client_request(int client_socket, int epoll_fd) {
+// Handle client request received on a socket
+void process_client_request(int client_socket, int epoll_fd) {
     string message;
     receive_data(client_socket, message);
+
+    if (message.empty() || shutdown_requested) {
+        return; // Client disconnected or shutdown signal handled
+    }
 
     if (message == SHUTDOWN_SIGNAL) {
         cout << "Shutdown signal received." << endl;
         shutdown_requested = 1;
         close(client_socket);
-        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_socket, nullptr); // Remove from epoll
+        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_socket, nullptr);
         return;
     }
 
@@ -111,27 +118,27 @@ void handle_client_request(int client_socket, int epoll_fd) {
                 return;
             }
         }
-        int port = 55556 + requested_floor;
+
+        int port = 55556 + requested_floor; // Map floor index to a port
         send_data(client_socket, to_string(port));
-        close(client_socket);
-        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_socket, nullptr); // Remove from epoll
     } catch (const exception &e) {
+        cerr << "Error processing message: " << e.what() << endl;
         send_data(client_socket, "Invalid input. Try again.");
-        return;
     }
+
+    close(client_socket);
+    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_socket, nullptr);
 }
 
-void handle_new_sensor(int server_socket, int epoll_fd) {
-    struct sockaddr_in client_addr;
-    socklen_t client_len = sizeof(client_addr);
-    int client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_len);
-
+// Accept new sensor connections and add them to epoll
+void handle_new_sensor_connection(int server_socket, int epoll_fd) {
+    int client_socket = accept(server_socket, nullptr, nullptr);
     if (client_socket == -1) {
         cerr << "accept() failed: " << strerror(errno) << endl;
         return;
     }
 
-    cout << "New connection accepted." << endl;
+    cout << "New sensor connection accepted." << endl;
 
     struct epoll_event ev;
     ev.events = EPOLLIN;
@@ -143,7 +150,8 @@ void handle_new_sensor(int server_socket, int epoll_fd) {
     }
 }
 
-void sensor_processing_thread(int server_socket) {
+// Handle sensor connections and requests in a thread
+void sensor_handling_thread(int server_socket) {
     int epoll_fd = setup_epoll(server_socket);
     struct epoll_event events[MAX_EVENTS];
     const int EPOLL_TIMEOUT = 5000; // Milliseconds
@@ -151,20 +159,16 @@ void sensor_processing_thread(int server_socket) {
     while (!shutdown_requested) {
         int nfds = epoll_wait(epoll_fd, events, MAX_EVENTS, EPOLL_TIMEOUT);
         if (nfds == -1) {
-            if (errno == EINTR) {
-                break;
-            }
+            if (errno == EINTR) continue; // Interrupted by signal, retry
             cerr << "epoll_wait() failed: " << strerror(errno) << endl;
             break;
         }
-        if (nfds == 0) {
-            continue;
-        }
+
         for (int i = 0; i < nfds; ++i) {
             if (events[i].data.fd == server_socket) {
-                handle_new_sensor(server_socket, epoll_fd);
+                handle_new_sensor_connection(server_socket, epoll_fd);
             } else {
-                handle_client_request(events[i].data.fd, epoll_fd);
+                process_client_request(events[i].data.fd, epoll_fd);
             }
         }
     }
@@ -172,44 +176,43 @@ void sensor_processing_thread(int server_socket) {
     close(epoll_fd);
 }
 
-void server_communication_thread(int server_socket) {
+// Receive updates from the server about floor availability
+void floor_availability_thread(int server_socket) {
     while (!shutdown_requested) {
-        int server_client_socket;
-        struct sockaddr_in server_client_addr;
-        socklen_t server_client_len = sizeof(server_client_addr);
-
-        server_client_socket = accept(server_socket, (struct sockaddr *)&server_client_addr, &server_client_len);
-        if (server_client_socket == -1) {
+        int client_socket = accept(server_socket, nullptr, nullptr);
+        if (client_socket == -1) {
             cerr << "Server accept() failed: " << strerror(errno) << endl;
             continue;
         }
 
-        char buffer[BUFFER_SIZE];
-        int bytes_received = recv(server_client_socket, buffer, sizeof(buffer) - 1, 0);
-        if (bytes_received <= 0) {
-            close(server_client_socket);
+        string message;
+        receive_data(client_socket, message);
+
+        if (message.empty() || shutdown_requested) {
             continue;
         }
 
-        buffer[bytes_received] = '\0';
-        string server_message = buffer;
-
-        if (server_message == SHUTDOWN_SIGNAL) {
+        if (message == SHUTDOWN_SIGNAL) {
             cout << "Shutdown signal received from server." << endl;
             shutdown_requested = 1;
-            close(server_client_socket);
+            close(client_socket);
             break;
         }
 
-        int new_floors = stoi(server_message);
+        try {
+            int new_available_floors = stoi(message);
 
-        {
-            lock_guard<mutex> lock(floor_mutex);
-            available_floors = new_floors;
+            {
+                lock_guard<mutex> lock(floor_mutex);
+                available_floors = new_available_floors;
+            }
+
+            cout << "Updated available floors: " << available_floors << endl;
+        } catch (const exception &e) {
+            cerr << "Error processing floor update: " << e.what() << endl;
         }
 
-        cout << "Updated available floors to: " << available_floors << endl;
-        close(server_client_socket);
+        close(client_socket);
     }
 }
 
@@ -217,14 +220,14 @@ int main() {
     signal(SIGINT, signal_handler);
 
     int sensor_socket, server_socket;
-    //create_server_socket(sensor_socket, ASSIGNER_PORT);
-    create_server_socket(server_socket, SERVER_PORT);
+    //create_and_connect_socket(sensor_socket, ASSIGNER_PORT);
+    create_and_connect_socket(server_socket, SERVER_PORT);
 
-    thread sensor_thread(sensor_processing_thread, sensor_socket);
-    thread server_thread(server_communication_thread, server_socket);
+    thread sensor_thread(sensor_handling_thread, sensor_socket);
+    thread floor_thread(floor_availability_thread, server_socket);
 
     sensor_thread.join();
-    server_thread.join();
+    floor_thread.join();
 
     cout << "Shutting down assigner." << endl;
     close(sensor_socket);
