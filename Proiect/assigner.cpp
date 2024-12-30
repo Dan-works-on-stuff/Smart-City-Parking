@@ -72,25 +72,29 @@ void send_data(int &sensorsocket, const string &mesaj) {
     }
 }
 
-void handle_client_request(int client_socket, int epoll_fd) {
-    char buffer[BUFFER_SIZE];
-    int bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
-
+void receive_data(int &acceptsocket, string& message) {
+    char buffer[200];
+    int bytes_received = recv(acceptsocket, buffer, sizeof(buffer), 0);
     if (bytes_received <= 0) {
-        if (bytes_received == 0) {
-            cout << "Sensor disconnected." << endl;
-        } else {
+        if (bytes_received < 0) {
             cerr << "recv() failed: " << strerror(errno) << endl;
+        } else {
+            cout << "sensor disconnected." << endl;
         }
-        close(client_socket);
-        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_socket, nullptr); // Remove from epoll
+        close(acceptsocket);
         return;
     }
 
     buffer[bytes_received] = '\0';
-    string client_message = buffer;
+    message = buffer;
+    cout << "Received: " << message << endl;
+}
 
-    if (client_message == SHUTDOWN_SIGNAL) {
+void handle_client_request(int client_socket, int epoll_fd) {
+    string message;
+    receive_data(client_socket, message);
+
+    if (message == SHUTDOWN_SIGNAL) {
         cout << "Shutdown signal received." << endl;
         shutdown_requested = 1;
         close(client_socket);
@@ -99,7 +103,7 @@ void handle_client_request(int client_socket, int epoll_fd) {
     }
 
     try {
-        int requested_floor = stoi(client_message);
+        int requested_floor = stoi(message);
         {
             lock_guard<mutex> lock(floor_mutex);
             if (requested_floor > available_floors) {
@@ -213,7 +217,7 @@ int main() {
     signal(SIGINT, signal_handler);
 
     int sensor_socket, server_socket;
-    create_server_socket(sensor_socket, ASSIGNER_PORT);
+    //create_server_socket(sensor_socket, ASSIGNER_PORT);
     create_server_socket(server_socket, SERVER_PORT);
 
     thread sensor_thread(sensor_processing_thread, sensor_socket);

@@ -174,7 +174,7 @@ bool update_parking_spots(const string &message) {
 }
 
 // Function to handle communication with a sensor
-void handle_communication(int epollfd, int sensorsocket) {
+void handle_communication(int sensorsocket) {
     string message;
     receive_data(sensorsocket, message);
 
