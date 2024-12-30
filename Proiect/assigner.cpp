@@ -17,23 +17,11 @@ void signal_handler(int signum) {
 }
 
 void create_server_socket(int &server_socket, int port) {
-    server_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_socket == -1) {
-        cerr << "Failed to create socket: " << strerror(errno) << endl;
-        exit(1);
-    }
-
-    int opt = 1;
-    if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
-        cerr << "setsockopt() failed: " << strerror(errno) << endl;
-        close(server_socket);
-        exit(1);
-    }
+    create_socket(server_socket);
 
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
 
-    // Bind to localhost only
     if (inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr) <= 0) {
         cerr << "inet_pton() failed: " << strerror(errno) << endl;
         close(server_socket);
@@ -42,19 +30,13 @@ void create_server_socket(int &server_socket, int port) {
 
     server_addr.sin_port = htons(port);
 
-    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
-        cerr << "bind() failed: " << strerror(errno) << endl;
+    if (connect(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
+        cerr << "connect() failed: " << strerror(errno) << endl;
         close(server_socket);
         exit(1);
     }
 
-    if (listen(server_socket, SOMAXCONN) == -1) {
-        cerr << "listen() failed: " << strerror(errno) << endl;
-        close(server_socket);
-        exit(1);
-    }
-
-    cout << "Socket is listening on localhost port " << port << endl;
+    cout << "Successfully connected to socket at " << port << ":" << port << endl;
 }
 
 int setup_epoll(int server_socket) {
@@ -134,6 +116,7 @@ void handle_client_request(int client_socket, int epoll_fd) {
         return;
     }
 }
+
 void handle_new_sensor(int server_socket, int epoll_fd) {
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);

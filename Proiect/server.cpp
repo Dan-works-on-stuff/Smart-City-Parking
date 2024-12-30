@@ -1,7 +1,10 @@
 #include "functions.h"
 
-using namespace std;
 
+using namespace std;
+#define FLOORMASTER_PORT 55553
+#define FLOORMASTER_SERVERS 55556
+#define ASSIGNER_PORT 55554
 const int MAX_PARCARI = 10;
 
 atomic<bool> admin_access(false);
@@ -15,6 +18,8 @@ struct FloorMaster {
 };
 vector<FloorMaster> FM;
 //fiecarui FloorMaster i se asociaza o structura de tipul FloorMaster ce contine chestiile alea
+
+
 
 void create_socket(int& serversocket);
 void bind_socket(int& serversocket, int port);
@@ -34,10 +39,14 @@ pid_t read_server_pid();
 
 int main() {
     signal(SIGUSR1, signal_handler);
+    int assignersocketfd=-1;
+    create_socket(assignersocketfd);
+    bind_socket(assignersocketfd, ASSIGNER_PORT);
+    socket_listens(assignersocketfd);
 
     int serversocketfd=-1;
     create_socket(serversocketfd);
-    bind_socket(serversocketfd, 55554);
+    bind_socket(serversocketfd, FLOORMASTER_PORT);
     socket_listens(serversocketfd);
 
     save_server_pid();
@@ -127,7 +136,7 @@ void handle_new_FloorMaster(int epollfd, int serversocket) {
         return;
     }
     char letter= 'A' + index;
-    FloorMaster newFM ={index, letter, vector<bool>(100, false),clientsocket, 55556+index};
+    FloorMaster newFM ={index, letter, vector<bool>(100, false),clientsocket, FLOORMASTER_SERVERS+index};
     FM.push_back(newFM);
 
     ev.events=EPOLLIN;
