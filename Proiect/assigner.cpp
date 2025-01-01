@@ -1,13 +1,18 @@
 #include "functions.h"
 
-#define MAX_EVENTS 10000
+#define MAX_SENSORS 10000
 #define ASSIGNER_PORT 55555
 #define SERVER_PORT 55554
 #define SHUTDOWN_SIGNAL "shutdown"
+#define STARTING_PORT 55556
 
 using namespace std;
 
-mutex mtx; // Mutex for shared resources
+volatile sig_atomic_t shutdown_requested = 0;
+int available_floors = -1;
+mutex floor_mutex; // Mutex for shared resources
+
+
 
 void create_socket(int& assignersocket);
 void bind_socket(int& assignersocket, int port);
@@ -16,10 +21,11 @@ void socket_listens(int& assignersocket);
 void receive_data(int &acceptsocket, string& message);
 void send_data(int &acceptsocket, const string &mesaj);
 int setup_epoll(int assignersocket);
-void handle_server(int epollfd, int assignersocket);
-void handle_server_communication(int epollfd, int serversocket);
-void listen_to_server (int assignersocket);
-void handle_sensors(int epollfd, int sensorsocket);
+void listen_to_server(int assignersocket);
+void process_sensor_request(int sensorsocket, int epollfd);
+void sensor_listen(int assignersocket);
+void signal_handler(int signum);
+void handle_new_sensors(int epollfd, int assignersocket);
 
 int main() {
     int server_fd=-1;
@@ -32,8 +38,11 @@ int main() {
     bind_socket(sensorsocketfd, ASSIGNER_PORT);
     socket_listens(sensorsocketfd);
 
-    thread server_listener(handle_server, server_fd);
-    thread sensor_listener(handle_sensors, sensorsocketfd);
+    thread server_listener(listen_to_server, server_fd);
+    thread sensor_listener(sensor_listen, sensorsocketfd);
+    server_listener.join();
+    sensor_listener.join();
+
 }
 
 
@@ -50,16 +59,16 @@ void connect_socks(int &clientsocket, struct sockaddr_in &clientService) {
     cout<<"FloorMaster: Can start sending and receiving data..."<<endl;
 }
 
-void socket_listens(int& FloorMasterSocket) {
-    if (listen(FloorMasterSocket, 2) == -1) {
+void socket_listens(int& assignersocket) {
+    if (listen(assignersocket, 2) == -1) {
         cerr << "listen() failed: " << strerror(errno) << endl;
-        close(FloorMasterSocket);
+        close(assignersocket);
         exit(1);
     }
     cout << "listen() OK, waiting for connections..." << endl;
 }
 
-int setup_epoll(int FloorMasterSocket) {
+int setup_epoll(int assignersocket) {
     int epollfd = epoll_create1(0);
     if (epollfd == -1) {
         cerr << "epoll_create1() failed: " << strerror(errno) << endl;
@@ -68,13 +77,168 @@ int setup_epoll(int FloorMasterSocket) {
 
     struct epoll_event ev = {};
     ev.events = EPOLLIN;
-    ev.data.fd = FloorMasterSocket;
+    ev.data.fd = assignersocket;
 
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, FloorMasterSocket, &ev) == -1) {
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, assignersocket, &ev) == -1) {
         cerr << "epoll_ctl() failed: " << strerror(errno) << endl;
         close(epollfd);
         exit(1);
     }
 
     return epollfd;
+}
+
+void handle_new_sensors(int epollfd, int assignersocket) {
+    int sensorsocket = accept(assignersocket, NULL, NULL);
+    if (sensorsocket == -1) {
+        cerr << "accept() failed: " << strerror(errno) << endl;
+        return;
+    }
+
+    struct epoll_event ev = {};
+    ev.events = EPOLLIN;
+    ev.data.fd = sensorsocket;
+
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, sensorsocket, &ev) == -1) {
+        cerr << "epoll_ctl() failed: " << strerror(errno) << endl;
+        close(sensorsocket);
+        return;
+    }
+    cout << "New sensor connected." << endl;
+}
+
+void sensor_listen(int assignersocket) {
+    int epollfd = setup_epoll(assignersocket);
+    struct epoll_event events[MAX_SENSORS];
+    const int EPOLL_TIMEOUT = 5000; // Milliseconds
+    while (!shutdown_requested) {
+        int nfds = epoll_wait(epollfd, events, MAX_SENSORS, EPOLL_TIMEOUT);
+        if (nfds == -1) {
+            if (errno == EINTR) continue; // Interrupted by signal, retry
+            cerr << "epoll_wait() failed: " << strerror(errno) << endl;
+            break;
+        }
+        for (int i = 0; i < nfds; i++) {
+            if (events[i].data.fd == assignersocket) {
+                handle_new_sensors(epollfd, assignersocket);
+            } else {
+                process_sensor_request(events[i].data.fd, epollfd);
+            }
+        }
+    }
+
+    close(epollfd);
+    close(assignersocket);
+}
+
+void listen_to_server(int assignersocket) {
+    while (!shutdown_requested) {
+        int client_socket = accept(assignersocket, nullptr, nullptr);
+        if (client_socket == -1) {
+            cerr << "Server accept() failed: " << strerror(errno) << endl;
+            close(client_socket);
+            exit(1);
+        }
+
+        string message;
+        receive_data(client_socket, message);
+
+        if (message.empty() || shutdown_requested) {
+            continue;
+        }
+
+        if (message == SHUTDOWN_SIGNAL) {
+            cout << "Shutdown signal received from server." << endl;
+            shutdown_requested = 1;
+            close(client_socket);
+            break;
+        }
+
+        try {
+            int new_available_floors = stoi(message);
+
+            {
+                lock_guard lock(floor_mutex);
+                available_floors = new_available_floors;
+            }
+
+            cout << "Updated available floors: " << available_floors << endl;
+        } catch (const exception &e) {
+            cerr << "Error processing floor update: " << e.what() << endl;
+        }
+
+        close(client_socket);
+    }
+}
+
+
+void process_sensor_request(int sensorsocket, int epollfd) {
+    string message;
+    receive_data(sensorsocket, message);
+
+    if (message.empty() || shutdown_requested) {
+        return;
+    }
+
+    if (message == SHUTDOWN_SIGNAL) {
+        cout << "Shutdown signal received." << endl;
+        shutdown_requested = 1;
+        close(sensorsocket);
+        epoll_ctl(epollfd, EPOLL_CTL_DEL, sensorsocket, nullptr);
+        return;
+    }
+    try {
+        int requested_floor = stoi(message);
+        {
+            lock_guard lock(floor_mutex);
+            if (requested_floor > available_floors) {
+                send_data(sensorsocket, "Invalid floor. Try again.");
+                return;
+            }
+        }
+
+        int port = STARTING_PORT + requested_floor; // Map floor index to a port
+        send_data(sensorsocket, to_string(port));
+    } catch (const exception &e) {
+        cerr << "Error processing message: " << e.what() << endl;
+        send_data(sensorsocket, "Invalid input. Try again.");
+    }
+
+    close(sensorsocket);
+    epoll_ctl(epollfd, EPOLL_CTL_DEL, sensorsocket, nullptr);
+}
+
+
+void signal_handler(int signum) {
+    shutdown_requested = 1;
+}
+
+void receive_data(int &acceptsocket, string& message) {
+    char buffer[200];
+    int bytes_received = recv(acceptsocket, buffer, sizeof(buffer), 0);
+    if (bytes_received <= 0) {
+        if (bytes_received < 0) {
+            cerr << "recv() failed: " << strerror(errno) << endl;
+        } else {
+            cout << "sensor disconnected." << endl;
+        }
+        close(acceptsocket);
+        return;
+    }
+
+    buffer[bytes_received] = '\0';
+    message = buffer;
+    cout << "Received: " << message << endl;
+}
+
+void send_data(int &acceptsocket, const string &mesaj) {
+    const char* buffer = mesaj.c_str();
+    size_t buffer_len = mesaj.length();
+    int bytes_sent = send(acceptsocket, buffer, buffer_len, 0);
+    if (bytes_sent == -1) {
+        cerr << "send() failed: " << strerror(errno) << endl;
+    }
+    //  else {
+    //     cout << "Sent: " << mesaj << endl;
+    // }
 }

@@ -35,6 +35,7 @@ void save_server_pid();
 pid_t read_server_pid();
 
 int main() {
+    signal(SIGPIPE, SIG_IGN);
     signal(SIGUSR1, signal_handler);
     int assignersocketfd=-1;
     create_socket(assignersocketfd);
@@ -66,7 +67,6 @@ void server_executions(int serversocket, int assignersocket) {
     while (!shutdown_requested) {
         int nfds=epoll_wait(epollfd, etaje, MAX_PARCARI, -1);
         if (nfds==-1) {
-            if (errno == EINTR) break;
             cerr<<"epoll_wait() failed: "<<strerror(errno)<<endl;
         }
         for (int i=0; i<nfds; i++) {

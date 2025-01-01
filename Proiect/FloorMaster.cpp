@@ -1,8 +1,9 @@
-#include <bits/fs_fwd.h>
-
 #include "functions.h"
 
+#define SERVER_PORT 55553
 using namespace std;
+
+
 ofstream g("parking.txt");
 string level_letter;
 int level_number;
@@ -51,7 +52,7 @@ int main() {
 void connect_socks(int &clientsocket, struct sockaddr_in &clientService) {
     clientService.sin_family=AF_INET;
     inet_pton(AF_INET, "127.0.0.1", &clientService.sin_addr);  //informatiile pentru a conecta socketurile intre ele
-    clientService.sin_port=htons(55554);      //htons e o functie pentru a pune bitii in ordinea corecta pe care o poate intelege serverul
+    clientService.sin_port=htons(SERVER_PORT);      //htons e o functie pentru a pune bitii in ordinea corecta pe care o poate intelege serverul
     if (connect(clientsocket, (struct sockaddr *)&clientService, sizeof(clientService))==-1) {
         cerr<<"Error with the connection(): "<< strerror(errno)<<endl;
         close(clientsocket);
@@ -174,7 +175,7 @@ bool update_parking_spots(const string &message) {
 }
 
 // Function to handle communication with a sensor
-void handle_communication(int sensorsocket) {
+void handle_communication(int epollfd, int sensorsocket) {
     string message;
     receive_data(sensorsocket, message);
 
@@ -209,7 +210,6 @@ void listener_thread(int FloorMasterSocket) {
             }
         }
     }
-
     close(epollfd);
     close(FloorMasterSocket);
 }
