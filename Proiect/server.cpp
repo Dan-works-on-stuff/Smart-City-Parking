@@ -28,8 +28,8 @@ void handle_communication(int epollfd, int clientsocket);
 void update_parking_spots(int clientsocket, const string& data);
 int setup_epoll(int serversocket);
 void server_executions(int serversocket, int assignersocket);
-void admin_listener();
-void admin_commands();
+void admin_listener(int assignersocket);
+void admin_commands(int assignersocket);
 void signal_handler(int signal);
 void save_server_pid();
 pid_t read_server_pid();
@@ -37,11 +37,6 @@ pid_t read_server_pid();
 int main() {
     signal(SIGPIPE, SIG_IGN);
     signal(SIGUSR1, signal_handler);
-    int assignersocketfd=-1;
-    create_socket(assignersocketfd);
-    bind_socket(assignersocketfd, ASSIGNER_PORT);
-    cout<<"Listen state on "<<ASSIGNER_PORT<<": ";
-    socket_listens(assignersocketfd);
 
     int serversocketfd=-1;
     create_socket(serversocketfd);
@@ -49,20 +44,30 @@ int main() {
     cout<<"Listen state on "<<FLOORMASTER_PORT<<": ";
     socket_listens(serversocketfd);
 
+    int assignersocketfd=-1;
+    create_socket(assignersocketfd);
+    bind_socket(assignersocketfd, ASSIGNER_PORT);
+    cout<<"Listen state on "<<ASSIGNER_PORT<<": ";
+    socket_listens(assignersocketfd);
+    int assigner_socket=accept(assignersocketfd, NULL, NULL);
+    if (assigner_socket==-1) {
+        cerr<<"accept() failed: "<<strerror(errno)<<endl;
+    }
+    else cout<<"assigner socket connected and ready for prime time "<< assigner_socket<<endl;
     save_server_pid();
 
-    thread server_thread(server_executions, serversocketfd, assignersocketfd);
-    thread admin_thread(admin_listener);
+    thread server_thread(server_executions, serversocketfd, assigner_socket);
+    thread admin_thread(admin_listener, assigner_socket);
     server_thread.join();
     admin_thread.join();
 
+    close(assignersocketfd);
     close(serversocketfd);
     return 0;
 }
 
 void server_executions(int serversocket, int assignersocket) {
     int epollfd=setup_epoll(serversocket);
-
     struct epoll_event etaje[MAX_PARCARI];
     while (!shutdown_requested) {
         int nfds=epoll_wait(epollfd, etaje, MAX_PARCARI, -1);
@@ -149,6 +154,7 @@ void handle_new_FloorMaster(int epollfd, int serversocket, int assignersocket) {
     string level(1, letter);
     send_data(clientsocket, level);
     send_data(assignersocket, to_string(index));
+    cout<<"New floor registered with the assigner as well."<<endl;
 }
 
 void handle_communication(int epollfd, int clientsocket) {
@@ -199,7 +205,7 @@ int setup_epoll(int serversocket) {
     return epollfd;
 }
 
-void admin_listener() {
+void admin_listener(int assignersocket) {
     while (true) {
         string input;
         getline(cin,input);
@@ -231,14 +237,14 @@ void admin_listener() {
         if (input == password) {
             cout<<"Admin access granted"<<endl;
             admin_access=true;
-            admin_commands();
+            admin_commands(assignersocket);
         }else {
             cerr<<"Incorrect password."<<endl;
         }
     }
 }
 
-void admin_commands() {
+void admin_commands(int assignersocket) {
     pid_t server_pid = read_server_pid();
     while (true) {
         string input;
@@ -252,6 +258,7 @@ void admin_commands() {
             //implement a .txt to save the current parkings status
             kill(server_pid, SIGUSR1);
             cout<<"Shutdown signal sent. Bye bye!"<<endl;
+            send_data(assignersocket, "shutdown");
             break;
         }
     }

@@ -86,12 +86,12 @@ int setup_epoll(int sensorsocket) {
     return epollfd;
 }
 
-int stringToInt(const string& str) {
-    int floor_nr=-1;
-    if (str.length() == 1 && str[0] >= 'A' && str[0] <= 'Z') {
-        floor_nr= floor_nr * 26 + (str[0] - 'A');
+int port_computer(const string& str) {
+    int port=0;
+    for (char c: str) {
+        port=port*10+(c-'0');
     }
-    return floor_nr;
+    return port;
 }
 
 int main() {
@@ -119,7 +119,7 @@ int main() {
     }while (message.size()>5 || message.size()==0);
     close(sensor_socket);
     create_socket(sensor_socket);
-    connect_to_FloorMaster(sensor_socket, sensor_service, stringToInt(message));
+    connect_to_FloorMaster(sensor_socket, sensor_service, port_computer(message));
     int epollfd =setup_epoll(sensor_socket);
     const int MAX_EVENTS=1;
     struct epoll_event events[MAX_EVENTS];

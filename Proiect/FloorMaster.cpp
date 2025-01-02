@@ -38,6 +38,7 @@ int main() {
 
     int FloorMasterSocketfd = -1;
     int port_for_sensors= 55556+level_number;
+    cout<<port_for_sensors<<endl;
     create_socket(FloorMasterSocketfd);
     bind_socket(FloorMasterSocketfd, port_for_sensors);
     socket_listens(FloorMasterSocketfd);
@@ -247,7 +248,6 @@ void send_data(int &serversocket, string mesaj) {
         }
         else cout<<"sensor: sent "<< bytes_sent << " bytes"<<endl;
 }
-
 
 void stringToInt(const string& str) {
     if (str.length() == 1 && str[0] >= 'A' && str[0] <= 'Z') {

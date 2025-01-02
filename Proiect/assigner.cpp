@@ -8,7 +8,7 @@
 
 using namespace std;
 
-volatile sig_atomic_t shutdown_requested = 0;
+atomic<bool> shutdown_requested = false;
 int available_floors = -1;
 mutex floor_mutex; // Mutex for shared resources
 
@@ -55,8 +55,7 @@ void connect_socks(int &clientsocket, struct sockaddr_in &clientService) {
         close(clientsocket);
         exit(1);
     }
-    cout<<"FloorMaster: connect() is OK."<<endl;
-    cout<<"FloorMaster: Can start sending and receiving data..."<<endl;
+    cout<<"connect() is OK."<<endl;
 }
 
 void socket_listens(int& assignersocket) {
@@ -133,27 +132,18 @@ void sensor_listen(int assignersocket) {
 
 void listen_to_server(int assignersocket) {
     while (!shutdown_requested) {
-        int client_socket = accept(assignersocket, nullptr, nullptr);
-        if (client_socket == -1) {
-            cerr << "Server accept() failed: " << strerror(errno) << endl;
-            close(client_socket);
-            exit(1);
-        }
-
         string message;
-        receive_data(client_socket, message);
+        receive_data(assignersocket, message);
 
         if (message.empty() || shutdown_requested) {
             continue;
         }
-
         if (message == SHUTDOWN_SIGNAL) {
             cout << "Shutdown signal received from server." << endl;
             shutdown_requested = 1;
-            close(client_socket);
+            close(assignersocket);
             break;
         }
-
         try {
             int new_available_floors = stoi(message);
 
@@ -166,8 +156,6 @@ void listen_to_server(int assignersocket) {
         } catch (const exception &e) {
             cerr << "Error processing floor update: " << e.what() << endl;
         }
-
-        close(client_socket);
     }
 }
 
