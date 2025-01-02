@@ -3,8 +3,6 @@
 #define SERVER_PORT 55553
 using namespace std;
 
-
-ofstream g("parking.txt");
 string level_letter;
 int level_number;
 const int MAX_PARCARI = 100;  // Maximum parking spots
@@ -219,14 +217,6 @@ void sender_thread(int serversocket) {
     while (true) {
         this_thread::sleep_for(chrono::seconds(update_interval));
         mtx.lock();
-        if (!g.is_open()) {
-            cerr<<"Erroare: Nu se poate accesa fisierul txt dorit. "<< strerror(errno)<<endl;
-            continue;
-        }
-        // for (int i=0; i<sensors.size(); i++) {
-        //     g<<sensors[i];
-        // }
-        // g<<endl<<endl;
         string message;
         for (int i=0; i<sensors.size(); i++) {
             message += sensors[i] ? '1' : '0';
@@ -234,8 +224,6 @@ void sender_thread(int serversocket) {
         message = level_letter + ": " + message;
         send_data(serversocket, message);
         mtx.unlock();
-        //de implementat trimiterea catre server (sa ma uit cum se intampla in sensor)
-
     }
 }
 

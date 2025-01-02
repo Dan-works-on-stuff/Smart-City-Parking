@@ -12,8 +12,6 @@ atomic<bool> shutdown_requested = false;
 int available_floors = -1;
 mutex floor_mutex; // Mutex for shared resources
 
-
-
 void create_socket(int& assignersocket);
 void bind_socket(int& assignersocket, int port);
 void connect_socks(int &clientsocket, struct sockaddr_in &clientService);

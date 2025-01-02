@@ -1,6 +1,7 @@
 #include "functions.h"
 
 using namespace std;
+
 #define FLOORMASTER_PORT 55553
 #define FLOORMASTER_SERVERS 55556
 #define ASSIGNER_PORT 55554
@@ -16,6 +17,7 @@ struct FloorMaster {
     int socket_for_sensors;
 };
 vector<FloorMaster> FM;
+mutex mtx;
 //fiecarui FloorMaster i se asociaza o structura de tipul FloorMaster ce contine chestiile alea
 
 void create_socket(int& serversocket);
@@ -28,6 +30,7 @@ void handle_communication(int epollfd, int clientsocket);
 void update_parking_spots(int clientsocket, const string& data);
 int setup_epoll(int serversocket);
 void server_executions(int serversocket, int assignersocket);
+void update_the_db();
 void admin_listener(int assignersocket);
 void admin_commands(int assignersocket);
 void signal_handler(int signal);
@@ -172,6 +175,7 @@ void handle_communication(int epollfd, int clientsocket) {
         return;
     }
     update_parking_spots(clientsocket,  message);
+    update_the_db();
     send_data(clientsocket, "Received data successfully.");
 }
 
@@ -179,13 +183,36 @@ void update_parking_spots(int clientsocket, const string& data) {
     for (auto& fm : FM) {
         if (fm.FMsock == clientsocket) {
             for (size_t i = 0; i < fm.parking_spots.size(); i++) {
-                fm.parking_spots[i] = (data[i] == '1');
+                fm.parking_spots[i] = (data[i+3] == '1');
             }
             cout << "Parking spots updated for FloorMaster " << fm.index << " (" << fm.letter << ")" << endl;
             return;
         }
     }//trebuie sa configurez ceva aici astfel incat sa am un output intr-un fisier cu toate etajele.
     cerr << "Error: FloorMaster not found for clientsocket " << clientsocket << endl;
+}
+
+void update_the_db() {
+    ofstream output_file("parking.txt", ios::trunc);
+        if (!output_file) {
+            cerr << "Error opening the file!" << endl;
+            return;
+        }
+        // Lock the mutex before accessing shared data
+        mtx.lock();
+
+        // Iterate through the FM vector
+        for (const auto& fm : FM) {
+            output_file << "FloorMaster Letter: " << fm.letter << endl;
+            output_file << "Parking Spots: ";
+            for (bool spot : fm.parking_spots) {
+                output_file << spot <<' ';
+            }
+            output_file << endl << "-------------------------" << endl;
+        }
+        // Unlock the mutex after writing data
+        mtx.unlock();
+    output_file.close();
 }
 
 int setup_epoll(int serversocket) {
