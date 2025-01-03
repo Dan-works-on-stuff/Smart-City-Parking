@@ -5,17 +5,17 @@ using namespace std;
 
 string level_letter;
 int level_number;
-const int MAX_PARCARI = 100;  // Maximum parking spots
-vector<bool> sensors(MAX_PARCARI, false); // Sensor status
+const int MAX_PARKING_SPOTS = 100;  // Maximum parking spots
+vector<bool> sensors(MAX_PARKING_SPOTS, false); // Sensor status
 mutex mtx; // Mutex for shared resources
 const int update_interval = 10; // Update interval in seconds
 
 // Function declarations
 void create_socket(int& FloorMasterSocket);
 void bind_socket(int& FloorMasterSocket, int port);
-void connect_socks(int &clientsocket, struct sockaddr_in &clientService);
-void socket_listens(int& FloorMasterSocket);
-void receive_data(int &acceptsocket, string& message);
+void connect_socks(int &ClientSocket, struct sockaddr_in &clientService);
+void socket_listens(int& FloorMasterSocket, string who, int MAX_PARKING);
+void receive_data(int &acceptsocket, string& message, string who);
 void send_data(int &acceptsocket, const string &mesaj);
 int setup_epoll(int FloorMasterSocket);
 void handle_sensor(int epollfd, int FloorMasterSocket);
@@ -39,7 +39,7 @@ int main() {
     cout<<port_for_sensors<<endl;
     create_socket(FloorMasterSocketfd);
     bind_socket(FloorMasterSocketfd, port_for_sensors);
-    socket_listens(FloorMasterSocketfd);
+    socket_listens(FloorMasterSocketfd, "FloorMaster", MAX_PARKING_SPOTS);
 
     thread listener(listener_thread, FloorMasterSocketfd);
     thread sender(sender_thread, server_socket);
@@ -48,50 +48,19 @@ int main() {
     return 0;
 }
 
-void connect_socks(int &clientsocket, struct sockaddr_in &clientService) {
+void connect_socks(int &ClientSocket, struct sockaddr_in &clientService) {
     clientService.sin_family=AF_INET;
     inet_pton(AF_INET, "127.0.0.1", &clientService.sin_addr);  //informatiile pentru a conecta socketurile intre ele
     clientService.sin_port=htons(SERVER_PORT);      //htons e o functie pentru a pune bitii in ordinea corecta pe care o poate intelege serverul
-    if (connect(clientsocket, (struct sockaddr *)&clientService, sizeof(clientService))==-1) {
+    if (connect(ClientSocket, (struct sockaddr *)&clientService, sizeof(clientService))==-1) {
         cerr<<"Error with the connection(): "<< strerror(errno)<<endl;
-        close(clientsocket);
+        close(ClientSocket);
         exit(1);
     }
     cout<<"FloorMaster: connect() is OK."<<endl;
     cout<<"FloorMaster: Can start sending and receiving data..."<<endl;
-    receive_data(clientsocket, level_letter);
+    receive_data(ClientSocket, level_letter, "FloorMaster");
 
-}
-
-// Function to set the socket to listen
-void socket_listens(int& FloorMasterSocket) {
-    if (listen(FloorMasterSocket, MAX_PARCARI) == -1) {
-        cerr << "listen() failed: " << strerror(errno) << endl;
-        close(FloorMasterSocket);
-        exit(1);
-    }
-    cout << "listen() OK, waiting for connections..." << endl;
-}
-
-// Function to set up epoll
-int setup_epoll(int FloorMasterSocket) {
-    int epollfd = epoll_create1(0);
-    if (epollfd == -1) {
-        cerr << "epoll_create1() failed: " << strerror(errno) << endl;
-        exit(1);
-    }
-
-    struct epoll_event ev = {};
-    ev.events = EPOLLIN;
-    ev.data.fd = FloorMasterSocket;
-
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, FloorMasterSocket, &ev) == -1) {
-        cerr << "epoll_ctl() failed: " << strerror(errno) << endl;
-        close(epollfd);
-        exit(1);
-    }
-
-    return epollfd;
 }
 
 // Function to handle new sensor connections
@@ -113,38 +82,6 @@ void handle_sensor(int epollfd, int FloorMasterSocket) {
     }
 
     cout << "New sensor connected." << endl;
-}
-
-// Function to receive data
-void receive_data(int &acceptsocket, string& message) {
-    char buffer[200];
-    int bytes_received = recv(acceptsocket, buffer, sizeof(buffer), 0);
-    if (bytes_received <= 0) {
-        if (bytes_received < 0) {
-            cerr << "recv() failed: " << strerror(errno) << endl;
-        } else {
-            cout << "sensor disconnected." << endl;
-        }
-        close(acceptsocket);
-        return;
-    }
-
-    buffer[bytes_received] = '\0';
-    message = buffer;
-    cout << "Received: " << message << endl;
-}
-
-// Function to send data
-void send_data(int &acceptsocket, const string &mesaj) {
-    const char* buffer = mesaj.c_str();
-    size_t buffer_len = mesaj.length();
-    int bytes_sent = send(acceptsocket, buffer, buffer_len, 0);
-    if (bytes_sent == -1) {
-        cerr << "send() failed: " << strerror(errno) << endl;
-    }
-    //  else {
-    //     cout << "Sent: " << mesaj << endl;
-    // }
 }
 
 // Function to process parking spot updates
@@ -176,7 +113,7 @@ bool update_parking_spots(const string &message) {
 // Function to handle communication with a sensor
 void handle_communication(int epollfd, int sensorsocket) {
     string message;
-    receive_data(sensorsocket, message);
+    receive_data(sensorsocket, message, "FloorMaster");
 
     if (message.empty() || message=="pa") {
         return; // No message received or sensor disconnected
@@ -192,10 +129,10 @@ void handle_communication(int epollfd, int sensorsocket) {
 // Listener thread to handle incoming connections and messages
 void listener_thread(int FloorMasterSocket) {
     int epollfd = setup_epoll(FloorMasterSocket);
-    struct epoll_event events[MAX_PARCARI];
+    struct epoll_event events[MAX_PARKING_SPOTS];
 
     while (true) {
-        int nfds = epoll_wait(epollfd, events, MAX_PARCARI, -1);
+        int nfds = epoll_wait(epollfd, events, MAX_PARKING_SPOTS, -1);
         if (nfds == -1) {
             cerr << "epoll_wait() failed: " << strerror(errno) << endl;
             continue; // Retry on error

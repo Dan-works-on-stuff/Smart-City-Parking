@@ -20,16 +20,16 @@ vector<FloorMaster> FM;
 mutex mtx;
 //fiecarui FloorMaster i se asociaza o structura de tipul FloorMaster ce contine chestiile alea
 
-void create_socket(int& serversocket);
-void bind_socket(int& serversocket, int port);
-void socket_listens(int& serversocket);
-void receive_data(int &acceptsocket, string& message);
-void send_data(int &acceptsocket, const string &mesaj);
-void handle_new_FloorMaster(int epollfd, int serversocket, int assignersocket);
+void create_socket(int& ServerSocket);
+void bind_socket(int& ServerSocket, int port);
+void socket_listens(int& ServerSocket, string who, int MAX_PARKING);
+void receive_data(int &AcceptSocket, string& message, string who);
+void send_data(int &AcceptSocket, const string &mesaj);
+int setup_epoll(int ServerSocket);
+void handle_new_FloorMaster(int epollfd, int ServerSocket, int assignersocket);
 void handle_communication(int epollfd, int clientsocket);
 void update_parking_spots(int clientsocket, const string& data);
-int setup_epoll(int serversocket);
-void server_executions(int serversocket, int assignersocket);
+void server_executions(int ServerSocket, int assignersocket);
 void update_the_db();
 void admin_listener(int assignersocket);
 void admin_commands(int assignersocket);
@@ -41,17 +41,17 @@ int main() {
     signal(SIGPIPE, SIG_IGN);
     signal(SIGUSR1, signal_handler);
 
-    int serversocketfd=-1;
-    create_socket(serversocketfd);
-    bind_socket(serversocketfd, FLOORMASTER_PORT);
+    int ServerSocketfd=-1;
+    create_socket(ServerSocketfd);
+    bind_socket(ServerSocketfd, FLOORMASTER_PORT);
     cout<<"Listen state on "<<FLOORMASTER_PORT<<": ";
-    socket_listens(serversocketfd);
+    socket_listens(ServerSocketfd, "Server for FloorMaster", MAX_PARCARI);
 
     int assignersocketfd=-1;
     create_socket(assignersocketfd);
     bind_socket(assignersocketfd, ASSIGNER_PORT);
     cout<<"Listen state on "<<ASSIGNER_PORT<<": ";
-    socket_listens(assignersocketfd);
+    socket_listens(assignersocketfd, "Server for Assigner", MAX_PARCARI);
     int assigner_socket=accept(assignersocketfd, NULL, NULL);
     if (assigner_socket==-1) {
         cerr<<"accept() failed: "<<strerror(errno)<<endl;
@@ -59,18 +59,18 @@ int main() {
     else cout<<"assigner socket connected and ready for prime time "<< assigner_socket<<endl;
     save_server_pid();
 
-    thread server_thread(server_executions, serversocketfd, assigner_socket);
+    thread server_thread(server_executions, ServerSocketfd, assigner_socket);
     thread admin_thread(admin_listener, assigner_socket);
     server_thread.join();
     admin_thread.join();
 
     close(assignersocketfd);
-    close(serversocketfd);
+    close(ServerSocketfd);
     return 0;
 }
 
-void server_executions(int serversocket, int assignersocket) {
-    int epollfd=setup_epoll(serversocket);
+void server_executions(int ServerSocket, int assignersocket) {
+    int epollfd=setup_epoll(ServerSocket);
     struct epoll_event etaje[MAX_PARCARI];
     while (!shutdown_requested) {
         int nfds=epoll_wait(epollfd, etaje, MAX_PARCARI, -1);
@@ -78,8 +78,8 @@ void server_executions(int serversocket, int assignersocket) {
             cerr<<"epoll_wait() failed: "<<strerror(errno)<<endl;
         }
         for (int i=0; i<nfds; i++) {
-            if (etaje[i].data.fd==serversocket) {
-                handle_new_FloorMaster(epollfd, serversocket, assignersocket);
+            if (etaje[i].data.fd==ServerSocket) {
+                handle_new_FloorMaster(epollfd, ServerSocket, assignersocket);
             }
             else handle_communication(epollfd, etaje[i].data.fd);
         }
@@ -88,50 +88,11 @@ void server_executions(int serversocket, int assignersocket) {
     cout<<"Au revoir"<<endl;
 }
 
-// listen(socket, int backlog); backlog=limita de clienti pt socket
-void socket_listens(int& serversocket) {
-    if (listen(serversocket,MAX_PARCARI)==-1) {  //am ales 10 clienti reprezentand un numar de 10 etaje teoretice posibile ale unei parcari
-        cerr<<"listen():Error listening to socket "<< strerror(errno)<<endl;
-        close(serversocket);
-        exit(1);
-    }
-    else cout<<"listen() OK, waiting for connections..."<<endl;
-}
 
-void receive_data(int &acceptsocket, string& message) {
-    char buffer[200];
-    int bytes_received = recv(acceptsocket, buffer, sizeof(buffer), 0);
-    if (bytes_received<0) {
-        cerr<<"Error with the connection(): "<< strerror(errno)<<endl;
-        exit(1);
-    }
-    else if (bytes_received==0) {
-        cout<<"client disconnected"<<endl;
-        close(acceptsocket);
-    }
-    else{
-        buffer[bytes_received]='\0';
-        message = buffer;
-        if (message=="pa") {
-            return;
-        }
-        cout<<"received data: "<<message<<endl;
-    }
-}
 
-void send_data(int &acceptsocket, const string &mesaj) {
-    const char* buffer = mesaj.c_str();
-    size_t buffer_len = mesaj.length();
-    int bytes_sent= send(acceptsocket, buffer, buffer_len, 0);
-    if (bytes_sent ==-1) {
-        cerr<<"send() failed: "<< strerror(errno)<<endl;
-    }
-    else cout<<"Server: sent "<< bytes_sent << " bytes ("<<mesaj<<')'<<endl;
-}
-
-void handle_new_FloorMaster(int epollfd, int serversocket, int assignersocket) {
+void handle_new_FloorMaster(int epollfd, int ServerSocket, int assignersocket) {
     struct epoll_event ev;
-    int clientsocket=accept(serversocket, NULL, NULL);
+    int clientsocket=accept(ServerSocket, NULL, NULL);
     if (clientsocket==-1) {
         cerr<<"accept() failed: "<<strerror(errno)<<endl;
         return;
@@ -162,12 +123,7 @@ void handle_new_FloorMaster(int epollfd, int serversocket, int assignersocket) {
 
 void handle_communication(int epollfd, int clientsocket) {
     string message;
-    receive_data(clientsocket, message);
-    if (message=="pa") {
-        cout<<"One FloorMaster requested to end the chat."<<endl;
-        close(clientsocket);
-        return;
-    }
+    receive_data(clientsocket, message, "Server");
     if (message.find_first_not_of("01", 3)!=string::npos) {
         cerr<<"Invalid data received: "<< message<<endl;
         string response="Error: Invalid parking data format";
@@ -213,23 +169,6 @@ void update_the_db() {
         // Unlock the mutex after writing data
         mtx.unlock();
     output_file.close();
-}
-
-int setup_epoll(int serversocket) {
-    int epollfd=epoll_create1(0);
-    if (epollfd==-1) {
-        cerr<<"epoll_create1() failed "<< strerror(errno)<<endl;
-        exit(1);
-    }
-    struct epoll_event ev;
-    ev.events = EPOLLIN;
-    ev.data.fd=serversocket;
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, serversocket, &ev)==-1) {
-        cerr<<"epoll_ctl() failed: "<<strerror(errno)<<endl;
-        close(epollfd);
-        exit(1);
-    }
-    return epollfd;
 }
 
 void admin_listener(int assignersocket) {

@@ -15,8 +15,8 @@ mutex floor_mutex; // Mutex for shared resources
 void create_socket(int& assignersocket);
 void bind_socket(int& assignersocket, int port);
 void connect_socks(int &clientsocket, struct sockaddr_in &clientService);
-void socket_listens(int& assignersocket);
-void receive_data(int &acceptsocket, string& message);
+void socket_listens(int& AssignerSocket, string who, int MAX_SENSOR);
+void receive_data(int &acceptsocket, string& message, string who);
 void send_data(int &acceptsocket, const string &mesaj);
 int setup_epoll(int assignersocket);
 void listen_to_server(int assignersocket);
@@ -34,7 +34,7 @@ int main() {
     int sensorsocketfd = -1;
     create_socket(sensorsocketfd);
     bind_socket(sensorsocketfd, ASSIGNER_PORT);
-    socket_listens(sensorsocketfd);
+    socket_listens(sensorsocketfd, "Assigner to Sensor", MAX_SENSORS);
 
     thread server_listener(listen_to_server, server_fd);
     thread sensor_listener(sensor_listen, sensorsocketfd);
@@ -54,35 +54,6 @@ void connect_socks(int &clientsocket, struct sockaddr_in &clientService) {
         exit(1);
     }
     cout<<"connect() is OK."<<endl;
-}
-
-void socket_listens(int& assignersocket) {
-    if (listen(assignersocket, 2) == -1) {
-        cerr << "listen() failed: " << strerror(errno) << endl;
-        close(assignersocket);
-        exit(1);
-    }
-    cout << "listen() OK, waiting for connections..." << endl;
-}
-
-int setup_epoll(int assignersocket) {
-    int epollfd = epoll_create1(0);
-    if (epollfd == -1) {
-        cerr << "epoll_create1() failed: " << strerror(errno) << endl;
-        exit(1);
-    }
-
-    struct epoll_event ev = {};
-    ev.events = EPOLLIN;
-    ev.data.fd = assignersocket;
-
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, assignersocket, &ev) == -1) {
-        cerr << "epoll_ctl() failed: " << strerror(errno) << endl;
-        close(epollfd);
-        exit(1);
-    }
-
-    return epollfd;
 }
 
 void handle_new_sensors(int epollfd, int assignersocket) {
@@ -131,7 +102,7 @@ void sensor_listen(int assignersocket) {
 void listen_to_server(int assignersocket) {
     while (!shutdown_requested) {
         string message;
-        receive_data(assignersocket, message);
+        receive_data(assignersocket, message, "Assigner");
 
         if (message.empty() || shutdown_requested) {
             continue;
@@ -160,7 +131,7 @@ void listen_to_server(int assignersocket) {
 
 void process_sensor_request(int sensorsocket, int epollfd) {
     string message;
-    receive_data(sensorsocket, message);
+    receive_data(sensorsocket, message, "Assigner");
 
     if (message.empty() || shutdown_requested) {
         return;
@@ -197,34 +168,4 @@ void process_sensor_request(int sensorsocket, int epollfd) {
 
 void signal_handler(int signum) {
     shutdown_requested = 1;
-}
-
-void receive_data(int &acceptsocket, string& message) {
-    char buffer[200];
-    int bytes_received = recv(acceptsocket, buffer, sizeof(buffer), 0);
-    if (bytes_received <= 0) {
-        if (bytes_received < 0) {
-            cerr << "recv() failed: " << strerror(errno) << endl;
-        } else {
-            cout << "sensor disconnected." << endl;
-        }
-        close(acceptsocket);
-        return;
-    }
-
-    buffer[bytes_received] = '\0';
-    message = buffer;
-    cout << "Received: " << message << endl;
-}
-
-void send_data(int &acceptsocket, const string &mesaj) {
-    const char* buffer = mesaj.c_str();
-    size_t buffer_len = mesaj.length();
-    int bytes_sent = send(acceptsocket, buffer, buffer_len, 0);
-    if (bytes_sent == -1) {
-        cerr << "send() failed: " << strerror(errno) << endl;
-    }
-    //  else {
-    //     cout << "Sent: " << mesaj << endl;
-    // }
 }
