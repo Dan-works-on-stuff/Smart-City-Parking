@@ -26,17 +26,17 @@ void signal_handler(int signum);
 void handle_new_sensors(int epollfd, int assignersocket);
 
 int main() {
-    int server_fd=-1;
-    create_socket(server_fd);
+    int server_socket_fd=-1;
+    create_socket(server_socket_fd);
     struct sockaddr_in serverAddress;
-    connect_socks(server_fd, serverAddress);
+    connect_socks(server_socket_fd, serverAddress);
 
     int sensorsocketfd = -1;
     create_socket(sensorsocketfd);
     bind_socket(sensorsocketfd, ASSIGNER_PORT);
     socket_listens(sensorsocketfd, "Assigner to Sensor", MAX_SENSORS);
 
-    thread server_listener(listen_to_server, server_fd);
+    thread server_listener(listen_to_server, server_socket_fd);
     thread sensor_listener(sensor_listen, sensorsocketfd);
     server_listener.join();
     sensor_listener.join();
