@@ -8,7 +8,7 @@ using namespace std;
 const int MAX_PARCARI = 10;
 
 atomic<bool> admin_access(false);
-atomic <bool> shutdown_requested = false;
+atomic<bool> shutdown_requested = false;
 struct FloorMaster {
     int index;
     char letter;
