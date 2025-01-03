@@ -124,6 +124,28 @@ void handle_new_FloorMaster(int epollfd, int ServerSocket, int assignersocket) {
 void handle_communication(int epollfd, int clientsocket) {
     string message;
     receive_data(clientsocket, message, "Server");
+    // Check if the client disconnected
+    if (message.empty()) {
+        auto it = find_if(FM.begin(), FM.end(), [clientsocket](const FloorMaster& fm) {
+            return fm.FMsock == clientsocket;
+        });
+
+        if (it != FM.end()) {
+            cout << "FloorMaster disconnected: " << it->letter << endl;
+            // Close the socket but keep its state in memory
+            close(it->FMsock);
+            it->FMsock = -1; // Mark as inactive
+        } else {
+            cerr << "Error: No FloorMaster found for the disconnected socket." << endl;
+        }
+        // Remove the client socket from the epoll instance
+        if (epoll_ctl(epollfd, EPOLL_CTL_DEL, clientsocket, nullptr) == -1) {
+            cerr << "epoll_ctl() failed to remove disconnected client: " << strerror(errno) << endl;
+        }
+        update_the_db();
+        return;
+    }
+
     if (message.find_first_not_of("01", 3)!=string::npos) {
         cerr<<"Invalid data received: "<< message<<endl;
         string response="Error: Invalid parking data format";
@@ -154,10 +176,7 @@ void update_the_db() {
             cerr << "Error opening the file!" << endl;
             return;
         }
-        // Lock the mutex before accessing shared data
         mtx.lock();
-
-        // Iterate through the FM vector
         for (const auto& fm : FM) {
             output_file << "FloorMaster Letter: " << fm.letter << endl;
             output_file << "Parking Spots: ";
@@ -166,7 +185,6 @@ void update_the_db() {
             }
             output_file << endl << "-------------------------" << endl;
         }
-        // Unlock the mutex after writing data
         mtx.unlock();
     output_file.close();
 }

@@ -82,7 +82,7 @@ void receive_data(int &AcceptSocket, string& message, string who) {
     char buffer[200];
     int bytes_received = recv(AcceptSocket, buffer, sizeof(buffer), 0);
     if (bytes_received<0) {
-        cerr<<"Error with the connection() in"<<who<<": "<< strerror(errno)<<endl;
+        cerr<<"Error with the connection() in "<<who<<": "<< strerror(errno)<<endl;
         return;
     }
     if (bytes_received==0) {
