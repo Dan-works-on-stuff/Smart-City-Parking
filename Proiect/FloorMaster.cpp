@@ -1,4 +1,4 @@
-#include "functions.h"
+#include "shared_functions.h"
 
 #define SERVER_PORT 55553
 using namespace std;

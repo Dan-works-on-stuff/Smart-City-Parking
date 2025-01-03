@@ -1,5 +1,5 @@
-#ifndef FUNCTIONS_H
-#define FUNCTIONS_H
+#ifndef SHARED_FUNCTIONS_H
+#define SHARED_FUNCTIONS_H
 #include <iostream>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -112,7 +112,7 @@ int setup_epoll(int socket) {
     }
     return epollfd;
 }
-#endif //FUNCTIONS_H
+#endif //SHARED_FUNCTIONS_H
 
 
 

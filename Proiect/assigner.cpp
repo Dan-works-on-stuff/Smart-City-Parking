@@ -1,4 +1,4 @@
-#include "functions.h"
+#include "shared_functions.h"
 
 #define MAX_SENSORS 10000
 #define ASSIGNER_PORT 55555
