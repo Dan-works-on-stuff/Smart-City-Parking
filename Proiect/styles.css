@@ -1,0 +1,64 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #222;
+    color: #fff;
+    margin: 0;
+    padding: 0;
+}
+
+header {
+    background-color: #444;
+    padding: 1rem;
+    text-align: center;
+}
+
+h1 {
+    margin: 0;
+}
+
+#parking-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.floor {
+    border: 1px solid #666;
+    margin: 1rem;
+    padding: 1rem;
+    border-radius: 8px;
+    background-color: #333;
+}
+
+.floor h2 {
+    margin: 0 0 1rem;
+    text-align: center;
+}
+
+.spots {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(20px, 1fr));
+    gap: 5px;
+}
+
+.spot {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    background-color: #444;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.spot.busy {
+    background-color: #ff4444;
+}
+
+.spot.free {
+    background-color: #44ff44;
+}
+
+.spot:hover {
+    filter: brightness(1.2);
+}
