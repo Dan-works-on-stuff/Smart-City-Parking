@@ -14,7 +14,7 @@ struct FloorMaster {
     char letter;
     vector<bool> parking_spots;
     int FMsock;
-    int socket_for_sensors;
+    int port_for_sensors;
 };
 vector<FloorMaster> FM;
 mutex mtx;
