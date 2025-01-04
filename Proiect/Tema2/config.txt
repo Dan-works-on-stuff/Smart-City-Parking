@@ -1,6 +1,0 @@
-#user list
-
-dan
-adi
-mircea
-maxcox
