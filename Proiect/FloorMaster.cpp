@@ -161,7 +161,7 @@ void sender_thread(int serversocket) {
         message = level_letter + ": " + message;
         send_data(serversocket, message);
         mtx.unlock();
-        receive_data(serversocket, message);
+        receive_data(serversocket, message, "FloorMaster");
     }
 }
 
