@@ -11,6 +11,7 @@ vector<bool> sensors(MAX_PARKING_SPOTS, false); // Sensor status
 mutex mtx; // Mutex for shared resources
 const int update_interval = 10; // Update interval in seconds
 
+
 // Function declarations
 void create_socket(int& FloorMasterSocket);
 void bind_socket(int& FloorMasterSocket, int port);
@@ -25,6 +26,8 @@ void listener_thread(int FloorMasterSocket);
 void sender_thread(int serversocket);
 bool update_parking_spots(const string &message);
 void stringToInt(const std::string& str);
+void save_server_pid();
+pid_t read_server_pid();
 
 
 int main() {
@@ -42,10 +45,15 @@ int main() {
     bind_socket(FloorMasterSocketfd, port_for_sensors);
     socket_listens(FloorMasterSocketfd, "FloorMaster", MAX_PARKING_SPOTS);
 
+    //save_server_pid();
+
     thread listener(listener_thread, FloorMasterSocketfd);
     thread sender(sender_thread, server_socket);
+    //thread admin_thread(admin_listener)
     listener.join();
     sender.join();
+    //admin_thread.join();
+
     return 0;
 }
 
@@ -180,4 +188,28 @@ void stringToInt(const string& str) {
     if (str.length() == 1 && str[0] >= 'A' && str[0] <= 'Z') {
         level_number = level_number * 26 + (str[0] - 'A');
     }
+}
+
+
+void save_server_pid() {
+    ofstream pid_file("server.pid");
+    if (pid_file.is_open()) {
+        pid_file<<getpid();
+        pid_file.close();
+    }else {
+        cerr<<"Failed to save server PID"<<endl;
+    }
+}
+
+pid_t read_server_pid() {
+    ifstream pid_file("server.pid");
+    pid_t pid;
+    if (pid_file.is_open()) {
+        pid_file>>pid;
+        pid_file.close();
+    }else {
+        cerr<<"Could not read server PID"<<endl;
+        exit(1);
+    }
+    return pid;
 }

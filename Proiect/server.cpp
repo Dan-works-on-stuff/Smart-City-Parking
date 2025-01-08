@@ -73,9 +73,12 @@ void server_executions(int ServerSocket, int assignersocket) {
     int epollfd=setup_epoll(ServerSocket);
     struct epoll_event etaje[MAX_PARCARI];
     while (!shutdown_requested) {
-        int nfds=epoll_wait(epollfd, etaje, MAX_PARCARI, -1);
+        int nfds=epoll_wait(epollfd, etaje, MAX_PARCARI, 5000);
         if (nfds==-1) {
             cerr<<"epoll_wait() failed: "<<strerror(errno)<<endl;
+        }
+        if (nfds==0) {
+            continue;
         }
         for (int i=0; i<nfds; i++) {
             if (etaje[i].data.fd==ServerSocket) {
@@ -85,9 +88,11 @@ void server_executions(int ServerSocket, int assignersocket) {
         }
     }
     close(epollfd);
-    cout<<"Au revoir"<<endl;
+    close(ServerSocket);
+    close(assignersocket);
+    cout<<"Au revoir!"<<endl;
+    exit(1);
 }
-
 
 
 void handle_new_FloorMaster(int epollfd, int ServerSocket, int assignersocket) {
