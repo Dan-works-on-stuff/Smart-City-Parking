@@ -1,6 +1,7 @@
 #include "shared_functions.h"
 
 #define SERVER_PORT 55553
+#define SENNSOR_PORTS 55556
 using namespace std;
 
 string level_letter;
@@ -35,7 +36,7 @@ int main() {
     stringToInt(level_letter);
 
     int FloorMasterSocketfd = -1;
-    int port_for_sensors= 55556+level_number;
+    int port_for_sensors= SENNSOR_PORTS+level_number;
     cout<<port_for_sensors<<endl;
     create_socket(FloorMasterSocketfd);
     bind_socket(FloorMasterSocketfd, port_for_sensors);
